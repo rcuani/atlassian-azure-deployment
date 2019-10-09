@@ -12,7 +12,7 @@
         },
         "_artifactsLocation": {
             "type": "string",
-            "defaultValue": "https://github.com/rcuani/atlassian-azure-deployment/tree/master/jira/",
+            "defaultValue": "https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/jira/",
             "metadata": {
                 "description": "The URL specifying the location of the installation files."
             }

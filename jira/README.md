@@ -4,7 +4,7 @@ Jira Software Data Center gives you uninterrupted access to JIRA Software with p
 
 ## Deploy to Azure Portal
 
-[![Deploy Jira Software Data Center to Azure Portal](https://azuredeploy.net/deploybutton.png)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fgithub.com%2Frcuani%2Fatlassian-azure-deployment%2Ftree%2Fmaster%2Fjira%2FmainTemplate.json)
+[![Deploy Jira Software Data Center to Azure Portal](https://azuredeploy.net/deploybutton.png)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fbitbucket.org%2Fatlassian%2Fatlassian-azure-deployment%2Fraw%2Fmaster%2Fjira%2FmainTemplate.json)
 
 NB. The current Azure deployment utilises certain Azure functionality like App Insights, Azure Monitoring, SQL Analytics etc that are still in Preview mode and not available in most regions. To ensure you can utilise these technologies deploy into the following regions:  
 
