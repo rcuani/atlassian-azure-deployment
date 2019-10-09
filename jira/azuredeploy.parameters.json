@@ -6,7 +6,7 @@
             "value": "canadacentral"
         },
         "_artifactsLocation": {
-            "value": "https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/jira/"
+            "value": "https://github.com/rcuani/atlassian-azure-deployment/tree/master/jira/"
         },
         "_artifactsLocationSasToken": {
             "value": ""
