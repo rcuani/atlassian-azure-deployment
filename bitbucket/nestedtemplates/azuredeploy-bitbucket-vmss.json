@@ -1,0 +1,482 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "metadata": {
+                "description": "Azure region (WestUS, CentralUs, AustraliaEast, etc) shared by all of the resources in the template"
+            }
+        },
+        "_artifactsLocation": {
+            "type": "string",
+            "defaultValue": "https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/bitbucket/",
+            "metadata": {
+                "description": "The base URI where artifacts required by this template are located"
+            }
+        },
+        "_artifactsLocationSasToken": {
+            "type": "securestring",
+            "metadata": {
+                "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated. Use the defaultValue if the staging location is not secured."
+            },
+            "defaultValue": ""
+        },
+        "bitbucketVersion": {
+            "type": "string",
+            "defaultValue": "latest",
+            "metadata": {
+                "description": "The Bitbucket software product version to install. You can also specify 'latest' to download the latest version available. If using with customDownloadUrl you have to specify the correct version."
+            }
+        },
+        "customDownloadUrl": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Use this URL to override standard Atlassian download url eg for EAP, RC versions. NB will be used in conjunction with the bitbucketVersion parameter."
+            }
+        },
+        "sshUserName": {
+            "type": "string",
+            "metadata": {
+                "description": "Username for SSH access to Bitbucket Server nodes as well as for the jumpbox"
+            }
+        },
+        "sshKey": {
+            "type": "string",
+            "metadata": {
+                "description": "SSH key to allow access to jumpbox."
+            }
+        },
+        "bbsVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_DS3_v2",
+            "allowedValues": [
+                "Standard_D4s_v3",
+                "Standard_D8s_v3",
+                "Standard_D16s_v3",
+                "Standard_D32s_v3",
+                "Standard_D64s_v3",
+                "Standard_DS2_v2",
+                "Standard_DS3_v2",
+                "Standard_DS4_v2",
+                "Standard_DS5_v2",
+                "Standard_DS2",
+                "Standard_DS3",
+                "Standard_DS4",
+                "Standard_B4ms",
+                "Standard_B8ms",
+                "Standard_F2s",
+                "Standard_F4s",
+                "Standard_F8s",
+                "Standard_F16s",
+                "Standard_E4s_v3",
+                "Standard_E8s_v3",
+                "Standard_E16s_v3",
+                "Standard_E32s_v3",
+                "Standard_E64s_v3",
+                "Standard_GS2",
+                "Standard_GS3",
+                "Standard_GS4",
+                "Standard_GS5",
+                "Standard_DS12_v2",
+                "Standard_DS13_v2",
+                "Standard_DS14_v2",
+                "Standard_DS15_v2",
+                "Standard_DS12",
+                "Standard_DS13",
+                "Standard_DS14",
+                "Standard_L4s",
+                "Standard_L8s",
+                "Standard_L16s",
+                "Standard_L32s"
+            ],
+            "metadata": {
+                "description": "The size of Bitbucket Server nodes vm"
+            }
+        },
+        "bbsNodeCount": {
+            "type": "int",
+            "defaultValue": 2,
+            "metadata": {
+                "description": "The amount of Bitbucket Server nodes to deploy"
+            }
+        },
+        "bbsNodePrefix": {
+            "type": "string",
+            "defaultValue": "bbsnode",
+            "metadata": {
+                "description": "Hostname prefix for nodes in Bitbucket Server cluster"
+            }
+        },
+        "bbsDiskSize": {
+            "type": "int",
+            "defaultValue": 31,
+            "metadata": {
+                "description": "The size (in GB) of the data disk that is used for logs on a Bitbucket Server node"
+            }
+        },
+        "bbsVmDiskCount": {
+            "type": "int",
+            "defaultValue": 8,
+            "maxValue": 32,
+            "metadata": {
+                "description": "The requested BitBucket Node disk will be striped for performance. Essentially the desired disk size will be divided by the bbsVmDiskCount and can't exceed 1023 GB. The clusterVmDiskCount count can't exceed the MaxDiskCount assigned to the VM Size."
+            }
+        },
+        "bbsDiskStorageType": {
+            "type": "string",
+            "defaultValue": "Premium_LRS",
+            "metadata": {
+                "description": "The type of storage account used for logs on a Bitbucket Server node"
+            }
+        },
+        "bbsHazelcastPort": {
+            "type": "string",
+            "defaultValue": "5701",
+            "metadata": {
+                "description": "Internal port that Bitbucket Server uses for Hazelcast communication"
+            }
+        },
+        "bbsHazelcastTag": {
+            "type": "string",
+            "defaultValue": "HAZELCAST",
+            "metadata": {
+                "description": "Hazelcast tag for nodes in Bitbucket Server cluster"
+            }
+        },
+        "bitbucketAdminUsername": {
+            "type": "string",
+            "defaultValue": "ssh",
+            "metadata": {
+                "description": "Username for Bitbucket Server administrator user. By default it's the same as ssh user."
+            }
+        },
+        "bitbucketAdminPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Password for Bitbucket Server administrator user."
+            }
+        },
+        "bitbucketAdminFullName": {
+            "type": "string",
+            "defaultValue": "John Doe",
+            "metadata": {
+                "description": "Bitbucket Server administorator full name."
+            }
+        },
+        "bitbucketAdminEmail": {
+            "type": "string",
+            "defaultValue": "admin@example.com",
+            "metadata": {
+                "description": "Bitbucket Server administrator email."
+            }
+        },
+        "dbType": {
+            "type": "string",
+            "allowedValues": [
+                "sqlserver",
+                "postgres",
+                "mysql"
+            ],
+            "defaultValue": "sqlserver",
+            "metadata": {
+                "description": "The database type."
+            }
+        },
+        "jdbcUrl": {
+            "type": "string"
+        },
+        "jdbcUserName": {
+            "type": "string"
+        },
+        "dbPassword": {
+            "type": "securestring",
+            "metadata": {
+                "description": "Password to access Bitbucket Server database."
+            }
+        },
+        "nfsPrivateIpAddress": {
+            "type": "string",
+            "metadata": {
+                "description": "NFS Private IP Address"
+            }
+        },
+        "vnetName": {
+            "type": "string"
+        },
+        "bbsSubnetName": {
+            "type": "string"
+        },
+        "appGtwyName": {
+            "type": "string"
+        },
+        "appGtwyBEndPoolName": {
+            "type": "string"
+        },
+        "bbsBaseUrl": {
+            "type": "string"
+        },
+        "sshLbBaseUrl": {
+            "type": "string"
+        },
+        "workspaceId": {
+            "type": "string",
+            "metadata": {
+                "description": "The ID of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "workspacePrimaryKey": {
+            "type": "string",
+            "metadata": {
+                "description": "The primary key of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "workspaceSecondaryKey": {
+            "type": "string",
+            "metadata": {
+                "description": "The secondary key of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "appInsightsInstrumentKey": {
+            "type": "string",
+            "defaultValue": ""
+        },
+        "linuxOsType": {
+            "type": "string",
+            "defaultValue": "Canonical:UbuntuServer:18.04-LTS",
+            "allowedValues": [
+                "Canonical:UbuntuServer:16.04-LTS",
+                "Canonical:UbuntuServer:18.04-LTS",
+                "RedHat:RHEL:7.5",
+                "OpenLogic:CentOS:7.5",
+                "credativ:Debian:9-backports"
+            ],
+            "metadata": {
+                "description": "Select your preferred Linux OS type. Bear in mind, the Linux OS type has to support Accelerated Networking as well - https://docs.microsoft.com/en-us/azure/virtual-network/create-vm-accelerated-networking-cli"
+            }
+        },
+        "blobStorageUri": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "namespace": "bitbucket",
+        "tags": {
+            "vendor": "Atlassian",
+            "product": "Bitbucket Server",
+            "provider": "2F0AF47A-92C7-413A-9009-C3815BFF7AF6"
+        },
+        "vm": {
+            "bbs": {
+                "name": "[concat(variables('namespace'), 'bbs-nodes')]",
+                "size": "[parameters('bbsVmSize')]",
+                "count": "[parameters('bbsNodeCount')]",
+                "hostname": "[parameters('bbsNodePrefix')]",
+                "hazelcastTag": {
+                    "[parameters('bbsHazelcastTag')]": "[parameters('bbsHazelcastPort')]"
+                },
+                "storage": {
+                    "size": "[if(greater(div(parameters('bbsDiskSize'), parameters('bbsVmDiskCount')), 1020), 1020, div(parameters('bbsDiskSize'), parameters('bbsVmDiskCount')))]",
+                    "type": "[parameters('bbsDiskStorageType')]",
+                    "caching": "None"
+                }
+            }
+        },
+        "username": "[if(equals(parameters('bitbucketAdminUsername'),'ssh'), parameters('sshUserName'), parameters('bitbucketAdminUsername'))]",
+        "jdbcDriver": "[if(equals(parameters('dbType'), 'sqlserver'), 'com.microsoft.sqlserver.jdbc.SQLServerDriver', 'org.postgresql.Driver')]",
+        "license": "AAABpg0ODAoPeNp1kUtP20AUhff+FVfqLtI4DkkgRLLUYA+UqtiR7SzawmLiXPBQe8aaR9r013ewDYG2LGZzH2fO+e6HorKQyD0ECwhmy/lsOZ3D1U0BJ8Fk4SW22aJK7zcalQ7JxIukMKw0CWswfDSVbJj+yEzNtOZM+KVsPG2YrvwvvEShsTi02M3mxSoraPZv96WztqqsmMaYGQyfPieTCQkW3ntKQ53+ark6dEvr6fT007NDesN4/Y7FHNUe1XUcXtAzSmbxtxNymn4+I1fT88Xg0AmyCIVBFRpl0cvtVpeKt4ZL0VdGo1GSFuQyzcg6S+NNVFynCdnk1DXCSKFztIPtAUyFMHgFKkq5QwWtko9YGvheGdPeLsfjB+m/sTiu+w2C/cadD7EEIQ3suDaKb61Bp8w1GAml1UY27kC+50I7z4KJ8jUYR/N8oNmnc3z4Hl9yRBldFTQmF1+fvP+f2RDBQduIH0L+FF5Ok9A9Mg8CL1UPTHDNOjyr31YhxNjW8tA4hl5Hw3X+Pm2MR6Z0z2rbTcGQHe6lgl5rd9Q6zvX2/wDFKfAUMCsCFH8cSCeQYWgwBdkxpTeUqGiTfg2qAhNxOHcjUrs7UMuuXFQw4T4+mxFqX02k8",
+        "env": {
+            "SQL": [
+                "[concat('SQL_PASS', '=\"', parameters('dbPassword'), '\" ')]",
+                "[concat('JDBC_DRIVER', '=\"', variables('jdbcDriver'), '\" ')]",
+                "[concat('JDBC_URL', '=\"', parameters('jdbcUrl'), '\" ')]",
+                "[concat('JDBC_USER', '=\"', parameters('jdbcUserName'), '\" ')]"
+            ],
+            "BBS": [
+                "[concat('BBS_VERSION', '=\"', parameters('bitbucketVersion'), '\" ')]",
+                "[concat('BBS_CUSTOM_DOWNLOAD_URL', '=\"', parameters('customDownloadUrl'), '\" ')]",
+                "[concat('BBS_ADMIN', '=\"', variables('username'), '\" ')]",
+                "[concat('BBS_PASS', '=\"', parameters('bitbucketAdminPassword'), '\" ')]",
+                "[concat('BBS_NAME', '=\"', parameters('bitbucketAdminFullName'), '\" ')]",
+                "[concat('BBS_EMAIL', '=\"', parameters('bitbucketAdminEmail'), '\" ')]",
+                "[concat('BBS_LICENSE', '=\"', variables('license'), '\" ')]",
+                "[concat('BBS_HAZELCAST_PORT', '=\"', parameters('bbsHazelcastPort'), '\" ')]",
+                "[concat('BBS_HAZELCAST_CLUSTER_ID', '=\"', parameters('bbsHazelcastTag'), '\" ')]",
+                "[concat('BBS_HAZELCAST_GROUP_NAME', '=\"', resourceGroup().name, '\" ')]",
+                "[concat('BBS_HAZELCAST_SUBSCRIPTION_ID', '=\"', subscription().subscriptionId, '\" ')]",
+                "[concat('BBS_ES_BASE_URL', '=\"http://', variables('elasticsearch').lbIp, ':9200/\" ')]",
+                "[concat('APPINSIGHTS_VER', '=\"', '2.3.1', '\" ')]",
+                "[concat('APPINSIGHTS_INSTRUMENTATION_KEY', '=\"', parameters('appInsightsInstrumentKey'), '\" ')]",
+                "[concat('OMS_WORKSPACE_ID', '=\"', parameters('workspaceId'), '\" ')]",
+                "[concat('OMS_PRIMARY_KEY', '=\"', parameters('workspacePrimaryKey'), '\" ')]",
+                "[concat('OMS_SECONDARY_KEY', '=\"', parameters('workspaceSecondaryKey'), '\" ')]"
+            ]
+        },
+        "data": {
+            "SQL": "[replace(replace(replace(replace(string(variables('env').SQL), '[\"', ''), '\"]', ''), '\",\"', ''), '\\\"', '\"')]",
+            "BBS": "[replace(replace(replace(replace(string(variables('env').BBS), '[\"', ''), '\"]', ''), '\",\"', ''), '\\\"', '\"')]"
+        },
+        "elasticsearch": {
+            "lbIp": "10.0.5.99"
+        },
+        "lb": {
+            "name": "[concat(variables('namespace'), '-lb')]",
+            "names": {
+                "bendGit": "[concat(variables('namespace'), '-lb', '-bend-git')]"
+            }
+        },
+        "reader-role": "[concat('/subscriptions/', subscription().subscriptionId, '/providers/Microsoft.Authorization/roleDefinitions/', 'acdd72a7-3385-48ef-bd42-f606fba81ae7')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Compute/virtualMachineScaleSets",
+            "apiVersion": "2018-06-01",
+            "location": "[parameters('location')]",
+            "tags": "[union(variables('tags'),variables('vm').bbs.hazelcastTag)]",
+            "name": "[variables('vm').bbs.name]",
+            "sku": {
+                "name": "[variables('vm').bbs.size]",
+                "capacity": "[variables('vm').bbs.count]"
+            },
+            "identity": {
+                "type": "SystemAssigned"
+            },
+            "properties": {
+                "upgradePolicy": {
+                    "mode": "Automatic"
+                },
+                "overprovision": false,
+                "virtualMachineProfile": {
+                    "osProfile": {
+                        "computerNamePrefix": "[variables('vm').bbs.hostname]",
+                        "adminUsername": "[parameters('sshUserName')]",
+                        "linuxConfiguration": {
+                            "disablePasswordAuthentication": true,
+                            "ssh": {
+                                "publicKeys": [
+                                    {
+                                        "path": "[concat('/home/', parameters('sshUserName'), '/.ssh/authorized_keys')]",
+                                        "keyData": "[parameters('sshKey')]"
+                                    }
+                                ]
+                            }
+                        }
+                    },
+                    "storageProfile": {
+                        "imageReference": {
+                            "publisher": "[split(parameters('linuxOsType'), ':')[0]]",
+                            "offer": "[split(parameters('linuxOsType'), ':')[1]]",
+                            "sku": "[split(parameters('linuxOsType'), ':')[2]]",
+                            "version": "latest"
+                        },
+                        "osDisk": {
+                            "createOption": "FromImage"
+                        },
+                        "copy": [
+                            {
+                                "name": "dataDisks",
+                                "count": "[parameters('bbsVmDiskCount')]",
+                                "input": {
+                                    "lun": "[copyIndex('dataDisks')]",
+                                    "caching": "[variables('vm').bbs.storage.caching]",
+                                    "createOption": "Empty",
+                                    "diskSizeGB": "[variables('vm').bbs.storage.size]",
+                                    "managedDisk": {
+                                        "storageAccountType": "[variables('vm').bbs.storage.type]"
+                                    }
+                                }
+                            }
+                        ]
+                    },
+                    "networkProfile": {
+                        "networkInterfaceConfigurations": [
+                            {
+                                "name": "[concat(variables('namespace'), variables('vm').bbs.hostname, '-nic')]",
+                                "properties": {
+                                    "primary": true,
+                                    "ipConfigurations": [
+                                        {
+                                            "name": "[concat(variables('namespace'), variables('vm').bbs.hostname, '-ipconfig')]",
+                                            "properties": {
+                                                "subnet": {
+                                                    "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets/', parameters('vnetName'), parameters('bbsSubnetName'))]"
+                                                },
+                                                "applicationGatewayBackendAddressPools": [
+                                                    {
+                                                        "id": "[resourceId('Microsoft.Network/applicationGateways/backendAddressPools/', parameters('appGtwyName'), parameters('appGtwyBEndPoolName'))]"
+                                                    }
+                                                ],
+                                                "loadBalancerBackendAddressPools": [
+                                                    {
+                                                        "id": "[resourceId('Microsoft.Network/loadBalancers/backendAddressPools/', variables('lb').name, variables('lb').names.bendGit)]"
+                                                    }
+                                                ]
+                                            }
+                                        }
+                                    ],
+                                    "enableAcceleratedNetworking": true
+                                }
+                            }
+                        ]
+                    },
+                    "diagnosticsProfile": {
+                        "bootDiagnostics": {
+                            "enabled": true,
+                            "storageUri": "[parameters('blobStorageUri')]"
+                        }
+                    },
+                    "extensionProfile": {
+                        "extensions": [
+                            {
+                                "name": "[concat(variables('vm').bbs.name, 'bbs-install-script')]",
+                                "properties": {
+                                    "publisher": "Microsoft.Azure.Extensions",
+                                    "type": "CustomScript",
+                                    "typeHandlerVersion": "2.0",
+                                    "autoUpgradeMinorVersion": true,
+                                    "settings": {
+                                        "fileUris": [
+                                            "[concat(uri(parameters('_artifactsLocation'), 'scripts/log.sh'), parameters('_artifactsLocationSasToken'))]",
+                                            "[concat(uri(parameters('_artifactsLocation'), 'scripts/vm-disk-utils-0.1.sh') , parameters('_artifactsLocationSasToken'))]",
+                                            "[concat(uri(parameters('_artifactsLocation'), 'scripts/bbs_settings.sh'), parameters('_artifactsLocationSasToken'))]",
+                                            "[concat(uri(parameters('_artifactsLocation'), 'scripts/nfs_settings.sh'), parameters('_artifactsLocationSasToken'))]",
+                                            "[concat(uri(parameters('_artifactsLocation'), 'scripts/settings.sh'), parameters('_artifactsLocationSasToken'))]",
+                                            "[concat(uri(parameters('_artifactsLocation'), 'scripts/install.sh'), parameters('_artifactsLocationSasToken'))]",
+                                            "[concat(uri(parameters('_artifactsLocation'), 'templates/ApplicationInsights.xml.template'), parameters('_artifactsLocationSasToken'))]",
+                                            "[concat(uri(parameters('_artifactsLocation'), 'templates/bitbucket-collectd.conf.template'), parameters('_artifactsLocationSasToken'))]"
+                                        ],
+                                        "commandToExecute": "[concat(variables('data').SQL, variables('data').BBS, ' NFS_SERVER_IP=\"', parameters('nfsPrivateIpAddress'), '\"', ' BBS_URL=\"', parameters('bbsBaseUrl'), '\"', ' BBS_SSH_URL=\"', parameters('sshLbBaseUrl'), ':7999', '\"', ' bash install.sh bbs 1>&1 2>&1 > ./bbsnfs.install-$(uname -n).log')]"
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+        {
+            "name": "[guid(resourceGroup().id)]",
+            "type": "Microsoft.Authorization/roleAssignments",
+            "apiVersion": "2017-05-01",
+            "dependsOn": [
+                "[variables('vm').bbs.name]"
+            ],
+            "properties": {
+                "roleDefinitionId": "[variables('reader-role')]",
+                "principalId": "[reference(concat(resourceId('Microsoft.Compute/virtualMachineScaleSets/', variables('vm').bbs.name),'/providers/Microsoft.ManagedIdentity/Identities/default'),'2015-08-31-PREVIEW').principalId]",
+                "scope": "[resourceGroup().id]"
+            }
+        }
+    ],
+    "outputs": {
+        "cmd": {
+            "type": "string",
+            "value": "[concat(variables('data').SQL, variables('data').BBS, ' NFS_SERVER_IP=\"', parameters('nfsPrivateIpAddress'), '\"', ' BBS_URL=\"', parameters('bbsBaseUrl'), '\"', ' BBS_SSH_URL=\"', parameters('sshLbBaseUrl'), ':7999', '\"', ' bash install.sh bbs')]"
+        },
+        "clusterName": {
+            "type": "string",
+            "value": "[variables('vm').bbs.name]"
+        }
+    }
+}

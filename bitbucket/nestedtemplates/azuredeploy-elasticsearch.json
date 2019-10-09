@@ -1,0 +1,348 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "_artifactsLocation": {
+            "type": "string",
+            "metadata": {
+                "description": "The base URI where artifacts required by this template are located"
+            }
+        },
+        "_artifactsLocationSasToken": {
+            "type": "securestring",
+            "metadata": {
+                "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated. Use the defaultValue if the staging location is not secured."
+            },
+            "defaultValue": ""
+        },
+        "sshUserName": {
+            "type": "string",
+            "metadata": {
+                "description": "Username for SSH access to Elasticsearch nodes."
+            }
+        },
+        "location": {
+            "type": "string",
+            "metadata": {
+                "description": "Location where resources will be provisioned."
+            }
+        },
+        "esDataNodeCount": {
+            "type": "int",
+            "defaultValue": 1,
+            "metadata": {
+                "description": "The number of elasticsearch data nodes to be deployed."
+            }
+        },
+        "esDataDiskSize": {
+            "type": "int",
+            "defaultValue": 32,
+            "metadata": {
+                "description": "The size of the data disk for elasticsearch in GB."
+            }
+        },
+        "esVmDiskCount": {
+            "type": "int",
+            "defaultValue": 8,
+            "maxValue": 32,
+            "metadata": {
+                "description": "The requested ElasticSearch Data node disks will be striped for performance. Essentially the desired disk size will be divided by the esVmDiskCount and can't exceed 1023 GB. The nfsVmDiskCount count can't exceed the MaxDiskCount assigned to the VM Size."
+            }
+        },
+        "esNodeVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_DS3_v2",
+            "allowedValues": [
+                "Standard_D4s_v3",
+                "Standard_D8s_v3",
+                "Standard_D16s_v3",
+                "Standard_D32s_v3",
+                "Standard_D64s_v3",
+                "Standard_DS2_v2",
+                "Standard_DS3_v2",
+                "Standard_DS4_v2",
+                "Standard_DS5_v2",
+                "Standard_DS2",
+                "Standard_DS3",
+                "Standard_DS4",
+                "Standard_B4ms",
+                "Standard_B8ms",
+                "Standard_F2s",
+                "Standard_F4s",
+                "Standard_F8s",
+                "Standard_F16s",
+                "Standard_E4s_v3",
+                "Standard_E8s_v3",
+                "Standard_E16s_v3",
+                "Standard_E32s_v3",
+                "Standard_E64s_v3",
+                "Standard_GS2",
+                "Standard_GS3",
+                "Standard_GS4",
+                "Standard_GS5",
+                "Standard_DS12_v2",
+                "Standard_DS13_v2",
+                "Standard_DS14_v2",
+                "Standard_DS15_v2",
+                "Standard_DS12",
+                "Standard_DS13",
+                "Standard_DS14",
+                "Standard_L4s",
+                "Standard_L8s",
+                "Standard_L16s",
+                "Standard_L32s"
+            ],
+            "metadata": {
+                "description": "The size of Elasticsearch nodes VM."
+            }
+        },
+        "namespace": {
+            "type": "string",
+            "defaultValue": "bitbucket-elasticsearch",
+            "metadata": {
+                "description": "The namespace prefix to be used for the Elasticsearch resources."
+            }
+        },
+        "sshKey": {
+            "type": "string",
+            "metadata": {
+                "description": "SSH key to allow access to Elasticsearch nodes."
+            }
+        },
+        "tags": {
+            "type": "object",
+            "metadata": {
+                "description": "The tags for the Elasticsearch resources."
+            }
+        },
+        "vnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "The virtual network name where Elasticsearch will be deployed."
+            }
+        },
+        "esSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "The subnet name where Elasticsearch will be deployed."
+            }
+        },
+        "workspaceId": {
+            "type": "string",
+            "metadata": {
+                "description": "The ID of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "workspacePrimaryKey": {
+            "type": "string",
+            "metadata": {
+                "description": "The primary key of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "workspaceSecondaryKey": {
+            "type": "string",
+            "metadata": {
+                "description": "The secondary key of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "appInsightsInstrumentKey": {
+            "type": "string",
+            "defaultValue": ""
+        },
+        "storageAccountName": {
+            "type": "string"
+        },
+        "storageAccessKey": {
+            "type": "securestring"
+        },
+        "esLoadBalancerPrivateIp": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "esLoadBalancerTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/third-party/loadbalancers/internal-lb-resources.json', parameters('_artifactsLocationSasToken')))]",
+        "esUbuntuNodeTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/third-party/settings/ubuntuSettings.json', parameters('_artifactsLocationSasToken')))]",
+        "version": "6.5.3",
+        "password": {
+            "type": "securestring",
+            "defaultValue": "generate",
+            "metadata": {
+                "description": "Password elasticsearch nodes. By default it is an autogenerated string."
+            }
+        },
+        "commonVmSettings": {
+            "credentials": {
+                "adminUsername": "[parameters('sshUserName')]",
+                "password": "[variables('password')]",
+                "authenticationType": "sshPublicKey",
+                "sshPublicKey": "[parameters('sshKey')]"
+            },
+            "location": "[parameters('location')]",
+            "namespacePrefix": "[parameters('namespace')]",
+            "storageAccountName": "[concat('elastic', uniqueString(resourceGroup().id, deployment().name))]",
+            "subnet": "[parameters('esSubnetName')]",
+            "subnetId": "[resourceId('Microsoft.Network/virtualNetworks/subnets', parameters('vnetName'), parameters('esSubnetName'))]",
+            "workspaceId": "[parameters('workspaceId')]",
+            "workspacePrimaryKey": "[parameters('workspacePrimaryKey')]",
+            "workspaceSecondaryKey": "[parameters('workspaceSecondaryKey')]",
+            "appInsightsInstrumentKey": "[parameters('appInsightsInstrumentKey')]"
+        },
+        "esSettings": {
+            "clusterName": "[concat(parameters('namespace'), '-cluster')]",
+            "heapSize": 0,
+            "httpCertBlob": "",
+            "httpCertPassword": "",
+            "httpCaCertBlob": "",
+            "httpCaCertPassword": "",
+            "installAdditionalPlugins": "",
+            "installPlugins": "No",
+            "securityAdminPwd": "",
+            "securityReadPwd": "",
+            "securityKibanaPwd": "",
+            "securityLogstashPwd": "",
+            "securityBeatsPwd": "",
+            "securityBootstrapPwd": "",
+            "samlMetadataUri": "",
+            "samlServiceProviderUri": "",
+            "transportCaCertBlob": "",
+            "transportCaCertPassword": "",
+            "transportCertPassword": "",
+            "version": "[variables('version')]",
+            "yamlConfiguration": ""
+        },
+        "topologySettings": {
+            "dataLoadBalancerBackEndPools": [
+                {
+                    "id": "[concat(resourceId('Microsoft.Network/loadBalancers','es-internal-lb'),'/backendAddressPools/LBBE')]"
+                }
+            ],
+            "dataNodesAreMasterEligible": "Yes",
+            "dataNodeStorageSettings": {
+                "accountType": "Premium_LRS",
+                "diskSize": "[if(greater(div(parameters('esDataDiskSize'), parameters('esVmDiskCount')), 1020), 1020, div(parameters('esDataDiskSize'), parameters('esVmDiskCount')))]",
+                "dataDisks": "[parameters('esVmDiskCount')]"
+            },
+            "jumpbox": "No",
+            "kibana": "No",
+            "kibanaCertBlob": "",
+            "kibanaKeyBlob": "",
+            "kibanaKeyPassphrase": "",
+            "kibanaYaml": "",
+            "logstash": "",
+            "logstashConf": "",
+            "logstashHeapSize": 0,
+            "logstashKeystorePwd": "",
+            "logstashPlugins": "",
+            "logstashYaml": "",
+            "vmClientNodeAcceleratedNetworking": "Yes",
+            "vmDataNodeAcceleratedNetworking": "Yes",
+            "vmKibanaAcceleratedNetworking": "Yes",
+            "vmLogstashAcceleratedNetworking": "Yes",
+            "vmMasterNodeAcceleratedNetworking": "Yes",
+            "vmClientNodeCount": 0,
+            "vmDataNodeCount": "[parameters('esDataNodeCount')]",
+            "vmDataNodeStorageAccountType": "Premium_LRS",
+            "vmHostNamePrefix": "[parameters('namespace')]",
+            "vmSizeDataNodes": "[parameters('esNodeVmSize')]",
+            "vmSizeKibana": "Standard_A6",
+            "vNetLoadBalancerIp": ""
+        },
+        "networkSettings": {
+            "https": "No",
+            "location": "[parameters('location')]",
+            "name": "[parameters('vNetName')]",
+            "resourceGroup": "[resourceGroup().name]",
+            "subnet": {
+                "loadbalancerIp": "[parameters('esLoadBalancerPrivateIp')]",
+                "name": "[parameters('esSubnetName')]"
+            }
+        }
+    },
+    "resources": [
+        {
+            "name": "esLoadBalancerTemplate",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('esLoadBalancerTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "applicationGatewaySettings": {
+                        "value": {}
+                    },
+                    "elasticTags": {
+                        "value": "[parameters('tags')]"
+                    },
+                    "networkSettings": {
+                        "value": "[variables('networkSettings')]"
+                    }
+                }
+            }
+        },
+        {
+            "name": "esNodeTemplate",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "dependsOn": [
+                "esLoadBalancerTemplate"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('esUbuntuNodeTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "_artifactsLocation": {
+                        "value": "[parameters('_artifactsLocation')]"
+                    },
+                    "_artifactsLocationSasToken": {
+                        "value": "[parameters('_artifactsLocationSasToken')]"
+                    },
+                    "azureCloudStorageAccount": {
+                        "value": {
+                            "install": "Yes",
+                            "name": "[parameters('storageAccountName')]",
+                            "key": "[parameters('storageAccessKey')]",
+                            "suffix": "core.windows.net"
+                        }
+                    },
+                    "commonVmSettings": {
+                        "value": "[variables('commonVmSettings')]"
+                    },
+                    "esSettings": {
+                        "value": "[variables('esSettings')]"
+                    },
+                    "elasticTags": {
+                        "value": "[parameters('tags')]"
+                    },
+                    "kibanaIp": {
+                        "value": ""
+                    },
+                    "networkSettings": {
+                        "value": "[variables('networkSettings')]"
+                    },
+                    "sharedStorageAccount": {
+                        "value": {
+                            "name": "",
+                            "key": "",
+                            "suffix": ""
+                        }
+                    },
+                    "topologySettings": {
+                        "value": "[variables('topologySettings')]"
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "esLbName": {
+            "type": "string",
+            "value": "es-internal-lb"
+        }
+    }
+}

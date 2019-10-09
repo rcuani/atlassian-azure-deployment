@@ -1,0 +1,105 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "dbType": {
+            "type": "string",
+            "allowedValues": [
+                "sqlserver",
+                "postgres",
+                "mysql"
+            ],
+            "defaultValue": "sqlserver",
+            "metadata": {
+                "description": "The database type."
+            }
+        },
+        "dbServerName": {
+            "type": "string",
+            "metadata": {
+                "description": "The database server name."
+            }
+        },
+        "dbDatabaseName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the BitBucket database."
+            }
+        },
+        "dbPort": {
+            "type": "string",
+            "metadata": {
+                "description": "The database port to use. 1433 for MS SQL, 5432 for PostgreSQL, 3306 for MySQL."
+            }
+        },
+        "dbUsername": {
+            "type": "string",
+            "metadata": {
+                "description": "The username for the dedicated database user."
+            }
+        },
+        "dbPassword": {
+            "type": "securestring",
+            "minLength": 8,
+            "metadata": {
+                "description": "The password for the dedicated database user."
+            }
+        },
+        "vnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the BitBucket virtual network."
+            }
+        },
+        "bbsSubnetName": {
+            "type": "string",
+            "metadata": {
+                "description": "The name of the subnet within the BitBucket virtual network where the BitBucket cluster is located."
+            }
+        },
+        "clusterDbAccessNetworkRule": {
+            "type": "string",
+            "defaultValue": "allowClusterDbAccess",
+            "metadata": {
+                "description": "The name of the network rule that enables the Jira cluster to access the database."
+            }
+        }
+    },
+    "variables": {
+        "dbName": "[split(parameters('dbServerName'),'.')[0]]",
+        "mssqlJdbcUrl": "[concat('jdbc:', parameters('dbType'), '://', parameters('dbServerName'), ':', parameters('dbPort'), ';database=', parameters('dbDatabaseName'))]",
+        "postgresJdbcUrl": "[concat('jdbc:postgresql://', parameters('dbServerName'), ':', parameters('dbPort'), '/', parameters('dbDatabaseName'), '&ssl=true')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Sql/servers/virtualNetworkRules",
+            "name": "[concat(variables('dbName'), '/', parameters('clusterDbAccessNetworkRule'))]",
+            "condition": "[equals(parameters('dbType'), 'sqlserver')]",
+            "apiVersion": "2015-05-01-preview",
+            "properties": {
+                "virtualNetworkSubnetId": "[concat(resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName')), '/subnets/', parameters('bbsSubnetName'))]",
+                "ignoreMissingVnetServiceEndpoint": false
+            }
+        },
+        {
+            "type": "Microsoft.DBforPostgreSQL/servers/virtualNetworkRules",
+            "name": "[concat(variables('dbName'), '/', parameters('clusterDbAccessNetworkRule'))]",
+            "condition": "[equals(parameters('dbType'), 'postgres')]",
+            "apiVersion": "2017-12-01",
+            "properties": {
+                "virtualNetworkSubnetId": "[concat(resourceId('Microsoft.Network/virtualNetworks', parameters('vnetName')), '/subnets/', parameters('bbsSubnetName'))]",
+                "ignoreMissingVnetServiceEndpoint": false
+            }
+        }
+    ],
+    "outputs": {
+        "jdbcUrl": {
+            "type": "string",
+            "value": "[if(equals(parameters('dbType'), 'sqlserver'), variables('mssqlJdbcUrl'), variables('postgresJdbcUrl'))]"
+        },
+        "jdbcUserName": {
+            "type": "string",
+            "value": "[if(equals(parameters('dbType'), 'sqlserver'), parameters('dbUsername'), concat(parameters('dbUsername'), '@', split(parameters('dbServerName'),'.')[0]))]"
+        }
+    }
+}

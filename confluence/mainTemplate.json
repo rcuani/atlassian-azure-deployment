@@ -1,0 +1,857 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "The Azure region/location where the artifacts will be deployed."
+            },
+            "minLength": 5
+        },
+        "_artifactsLocation": {
+            "type": "string",
+            "defaultValue": "https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/confluence/",
+            "metadata": {
+                "description": "The URL specifying the location of the installation artifacts."
+            }
+        },
+        "_artifactsLocationSasToken": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The (optional) Shared Access Signature (SAS) token that provides access to resources in the storage account."
+            }
+        },
+        "isMarketplaceDeployment": {
+            "type": "bool",
+            "defaultValue": false,
+            "metadata": {
+                "description": "If these templates are being deployed via the Azure Marketplace."
+            }
+        },
+        "confluenceVersion": {
+            "type": "string",
+            "defaultValue": "latest",
+            "metadata": {
+                "description": "The Confluence software product version to install. You can also specify 'latest' to download the latest version available. If using with customDownloadUrl you have to specify the correct version."
+            }
+        },
+        "customDownloadUrl": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Use this URL to override standard Atlassian download url eg for EAP, RC versions. NB will be used in conjunction with the confluenceVersion parameter."
+            }
+        },
+        "dbCreateNew": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Create a new database or attempt to use an existing specified database. Note that this has to be in same resource group and location as the target deployment."
+            }
+        },
+        "dbType": {
+            "type": "string",
+            "allowedValues": [
+                "Azure SQL DB",
+                "Azure DB for PostgreSQL"
+            ],
+            "defaultValue": "Azure SQL DB",
+            "metadata": {
+                "description": "The database type."
+            }
+        },
+        "confClusterSize": {
+            "type": "string",
+            "allowedValues": [
+                "",
+                "trial",
+                "small",
+                "medium",
+                "large",
+                "enterprise"
+            ],
+            "defaultValue": "",
+            "metadata": {
+                "description": "To use recommended hardware options for the Confluence installation choose a size. NB if selected all further Gateway, VM, DB size parameters will be IGNORED."
+            }
+        },
+        "cname": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "This is the Canonical Name record (CNAME) for your organization. If you don't provide one, Azure will generate a random domain"
+            }
+        },
+        "sslBase64EncodedPfxCertificate": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The certificate to be used for SSL termination on the Azure Application Gateway."
+            }
+        },
+        "sslPfxCertificatePassword": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The certificate password to be used for SSL termination on the Azure Application Gateway."
+            }
+        },
+        "sshKey": {
+            "type": "string",
+            "metadata": {
+                "description": "The SSH public key to use to access the Jumpbox."
+            },
+            "minLength": 300
+        },
+        "sshUserName": {
+            "type": "string",
+            "minLength": 5,
+            "metadata": {
+                "description": "The SSH username to use to access the Confluence nodes from the Jumpbox. Note that access to the Confluence nodes can only be made in this way."
+            }
+        },
+        "confAdminUserName": {
+            "type": "string",
+            "defaultValue": "admin",
+            "minLength": 5,
+            "metadata": {
+                "description": "The username for the Confluence Administrator's account. Has to be in lowercase."
+            }
+        },
+        "confAdminUserPassword": {
+            "type": "securestring",
+            "minLength": 5,
+            "metadata": {
+                "description": "The password for the Confluence Administrator's account."
+            }
+        },
+        "confAdminUserFullName": {
+            "type": "string",
+            "defaultValue": "Admin Admin",
+            "minLength": 5,
+            "metadata": {
+                "description": "The fullname for the Confluence Administrator's account."
+            }
+        },
+        "confAdminUserEmail": {
+            "type": "string",
+            "defaultValue": "admin@example.com",
+            "minLength": 5,
+            "metadata": {
+                "description": "The email address of the Confluence Administrator user."
+            }
+        },
+        "confAppTitle": {
+            "type": "string",
+            "defaultValue": "Atlassian Confluence",
+            "metadata": {
+                "description": "The name of the Confluence site."
+            }
+        },
+        "dbHost": {
+            "type": "string",
+            "defaultValue": "AUTO-GENERATED",
+            "metadata": {
+                "description": "The hostname of database server to be used if an external database is being used. This will be autogenerated if a new database is to be created."
+            }
+        },
+        "dbPort": {
+            "type": "string",
+            "defaultValue": "1433",
+            "metadata": {
+                "description": "The database port to use if an external database is being used. This will be autogenerated if a new database is to be created."
+            }
+        },
+        "dbDatabase": {
+            "type": "string",
+            "defaultValue": "confdatabase",
+            "metadata": {
+                "description": "The database name to use if an external database is being used. This will be autogenerated if a new database is to be created."
+            }
+        },
+        "dbSchema": {
+            "type": "string",
+            "defaultValue": "AUTO-GENERATED",
+            "metadata": {
+                "description": "The database schema to use if an external database is being used. This will be autogenerated if a new database is to be created."
+            }
+        },
+        "dbUsername": {
+            "type": "string",
+            "defaultValue": "confluencedbuser",
+            "metadata": {
+                "description": "The username for the dedicated database user."
+            }
+        },
+        "dbPassword": {
+            "type": "securestring",
+            "minLength": 8,
+            "metadata": {
+                "description": "The password for the dedicated database user."
+            }
+        },
+        "dbTier": {
+            "type": "string",
+            "allowedValues": [
+                "Basic",
+                "Standard",
+                "Premium",
+                "GeneralPurpose",
+                "BusinessCritical"
+            ],
+            "defaultValue": "Standard",
+            "metadata": {
+                "description": "The database service tier. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "dbTierSize": {
+            "type": "string",
+            "allowedValues": [
+                "Basic",
+                "S1",
+                "S2",
+                "S3",
+                "S4",
+                "S6",
+                "S7",
+                "S9",
+                "S12",
+                "P1",
+                "P2",
+                "P4",
+                "P6",
+                "P11",
+                "P15",
+                "GP_Gen4_1",
+                "GP_Gen4_10",
+                "GP_Gen4_16",
+                "GP_Gen4_2",
+                "GP_Gen4_24",
+                "GP_Gen4_3",
+                "GP_Gen4_4",
+                "GP_Gen4_5",
+                "GP_Gen4_6",
+                "GP_Gen4_7",
+                "GP_Gen4_8",
+                "GP_Gen4_9",
+                "GP_Gen5_10",
+                "GP_Gen5_12",
+                "GP_Gen5_14",
+                "GP_Gen5_16",
+                "GP_Gen5_18",
+                "GP_Gen5_2",
+                "GP_Gen5_20",
+                "GP_Gen5_24",
+                "GP_Gen5_32",
+                "GP_Gen5_4",
+                "GP_Gen5_40",
+                "GP_Gen5_6",
+                "GP_Gen5_8",
+                "GP_Gen5_80",
+                "BC_Gen4_1",
+                "BC_Gen4_10",
+                "BC_Gen4_16",
+                "BC_Gen4_2",
+                "BC_Gen4_24",
+                "BC_Gen4_3",
+                "BC_Gen4_4",
+                "BC_Gen4_5",
+                "BC_Gen4_6",
+                "BC_Gen4_7",
+                "BC_Gen4_8",
+                "BC_Gen4_9",
+                "BC_Gen5_10",
+                "BC_Gen5_12",
+                "BC_Gen5_14",
+                "BC_Gen5_16",
+                "BC_Gen5_18",
+                "BC_Gen5_2",
+                "BC_Gen5_20",
+                "BC_Gen5_24",
+                "BC_Gen5_32",
+                "BC_Gen5_4",
+                "BC_Gen5_40",
+                "BC_Gen5_6",
+                "BC_Gen5_8",
+                "BC_Gen5_80"
+            ],
+            "defaultValue": "S2",
+            "metadata": {
+                "description": "The size of the database service tier. Basic, Standard (S1..S12) and Premium (P1..P15) tier sizes are available. Choose GP and BC SKUs for vCore model. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "clusterSize": {
+            "type": "int",
+            "allowedValues": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+            ],
+            "defaultValue": 2,
+            "minValue": 1,
+            "metadata": {
+                "description": "The number of Confluence nodes in the cluster. Maximum is 6 nodes. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "clusterVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_DS3_v2",
+            "allowedValues": [
+                "Standard_D4s_v3",
+                "Standard_D8s_v3",
+                "Standard_D16s_v3",
+                "Standard_D32s_v3",
+                "Standard_D64s_v3",
+                "Standard_DS2_v2",
+                "Standard_DS3_v2",
+                "Standard_DS4_v2",
+                "Standard_DS5_v2",
+                "Standard_DS2",
+                "Standard_DS3",
+                "Standard_DS4",
+                "Standard_B4ms",
+                "Standard_B8ms",
+                "Standard_F2s",
+                "Standard_F4s",
+                "Standard_F8s",
+                "Standard_F16s",
+                "Standard_E4s_v3",
+                "Standard_E8s_v3",
+                "Standard_E16s_v3",
+                "Standard_E32s_v3",
+                "Standard_E64s_v3",
+                "Standard_GS2",
+                "Standard_GS3",
+                "Standard_GS4",
+                "Standard_GS5",
+                "Standard_DS12_v2",
+                "Standard_DS13_v2",
+                "Standard_DS14_v2",
+                "Standard_DS15_v2",
+                "Standard_DS12",
+                "Standard_DS13",
+                "Standard_DS14",
+                "Standard_L4s",
+                "Standard_L8s",
+                "Standard_L16s",
+                "Standard_L32s"
+            ],
+            "metadata": {
+                "description": "The size of the virtual machine to use for each Confluence node in the cluster. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "linuxOsType": {
+            "type": "string",
+            "defaultValue": "Canonical:UbuntuServer:18.04-LTS",
+            "allowedValues": [
+                "Canonical:UbuntuServer:16.04-LTS",
+                "Canonical:UbuntuServer:18.04-LTS",
+                "RedHat:RHEL:7.5",
+                "OpenLogic:CentOS:7.5",
+                "credativ:Debian:9-backports"
+            ],
+            "metadata": {
+                "description": "Select your preferred Linux OS type. Bear in mind, the Linux OS type has to support Accelerated Networking as well - https://docs.microsoft.com/en-us/azure/virtual-network/create-vm-accelerated-networking-cli"
+            }
+        },
+        "clusterVmDiskSize": {
+            "type": "int",
+            "defaultValue": 1000,
+            "metadata": {
+                "description": "The desired size of the Cluster Node's allocation disk in GB"
+            }
+        },
+        "clusterVmDiskCount": {
+            "type": "int",
+            "defaultValue": 8,
+            "maxValue": 32,
+            "metadata": {
+                "description": "The requested Cluster Node disk will be striped for performance. Essentially the desired disk size will be divided by the clusterVmDiskCount and can't exceed 1023 GB. The clusterVmDiskCount count can't exceed the MaxDiskCount assigned to the VM Size."
+            }
+        },
+        "appGtwyClusterSize": {
+            "type": "int",
+            "allowedValues": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+            ],
+            "defaultValue": 2,
+            "minValue": 1,
+            "metadata": {
+                "description": "The number of nodes for the Application Gateway cluster. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "appGtwyTier": {
+            "type": "string",
+            "allowedValues": [
+                "Standard_Small",
+                "Standard_Medium",
+                "Standard_Large"
+            ],
+            "defaultValue": "Standard_Medium",
+            "metadata": {
+                "description": "The Application Gateway size. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "postgresDbSku": {
+            "type": "string",
+            "defaultValue": "GP_Gen5_4",
+            "allowedValues": [
+                "GP_Gen5_2",
+                "GP_Gen5_4",
+                "GP_Gen5_8",
+                "GP_Gen5_16",
+                "GP_Gen5_32",
+                "MO_Gen5_2",
+                "MO_Gen5_4",
+                "MO_Gen5_8",
+                "MO_Gen5_16",
+                "MO_Gen5_32"
+            ],
+            "metadata": {
+                "description": "The SKU (Stock Keeping Unit) name of the PostgresSQL instance. Follows the convention {pricing tier}{compute generation}{vCores} eg General Purpose, Generation 5, 4 cores is GP_Gen5_4. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "postgresDbStorage": {
+            "type": "int",
+            "defaultValue": 102400,
+            "minValue": 102400,
+            "maxValue": 4194304,
+            "metadata": {
+                "description": "The storage size of the PostgresSQL instance in MB. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "postgresDbCollation": {
+            "type": "string",
+            "defaultValue": "English_United States.1252",
+            "metadata": {
+                "description": "The collation of the PostgresSQL Managed Database."
+            }
+        },
+        "jumpboxVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_B1s",
+            "metadata": {
+                "description": "The size of the virtual machine to use for the Jumpbox. Note that if the 'confClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "workspaceSku": {
+            "type": "string",
+            "defaultValue": "Free",
+            "allowedValues": [
+                "Free",
+                "PerNode",
+                "Standalone",
+                "Standard",
+                "Premium",
+                "Unlimited",
+                "PerGB2018"
+            ],
+            "metadata": {
+                "description": "Workspace SKU Pricing Tier. Options depend upon when Azure Subscription created. If after 2018, use 'PerGB2018' otherwise 'Free'."
+            }
+        },
+        "enableEmailAlerts": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable email alerts."
+            }
+        },
+        "enableApplicationInsights": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable Azure Application Insights."
+            }
+        },
+        "enableAnalytics": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable Azure Operational Insights."
+            }
+        },
+        "enableAcceleratedNetworking": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable accelerated networking. Note that this needs to be on a supported instance type."
+            }
+        }
+    },
+    "variables": {
+        "namespace": "conf",
+        "vpcTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-vpc.json', parameters('_artifactsLocationSasToken')))]",
+        "confTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-confluence.json', parameters('_artifactsLocationSasToken')))]",
+        "domainTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-domain.json', parameters('_artifactsLocationSasToken')))]",
+        "alertsTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-alerts.json', parameters('_artifactsLocationSasToken')))]",
+        "dbServerName": "[concat(variables('namespace'), if(equals(parameters('dbType'),'Azure SQL DB'),'sqlserver','postgres'), uniqueString(resourceGroup().id))]",
+        "isConfClusterSizeUsed": "[not(empty(parameters('confClusterSize')))]",
+        "clusterLookup": {
+            "appGtwyTier": {
+                "trial": "Standard_Small",
+                "small": "Standard_Medium",
+                "medium": "Standard_Medium",
+                "large": "Standard_Large",
+                "enterprise": "Standard_Large"
+            },
+            "appGtwySize": {
+                "trial": 1,
+                "small": 2,
+                "medium": 2,
+                "large": 4,
+                "enterprise": 6
+            },
+            "dbTier": {
+                "trial": "Basic",
+                "small": "Standard",
+                "medium": "Standard",
+                "large": "Premium",
+                "enterprise": "Premium"
+            },
+            "dbTierSize": {
+                "trial": "Basic",
+                "small": "S2",
+                "medium": "S4",
+                "large": "P4",
+                "enterprise": "P6"
+            },
+            "postgresDbSku": {
+                "trial": "GP_Gen5_2",
+                "small": "GP_Gen5_2",
+                "medium": "GP_Gen5_4",
+                "large": "GP_Gen5_8",
+                "enterprise": "MO_Gen5_8"
+            },
+            "postgresDbStorageSize": {
+                "trial": 102400,
+                "small": 102400,
+                "medium": 256000,
+                "large": 512000,
+                "enterprise": 1024000
+            },
+            "clusterVmSize": {
+                "trial": "Standard_DS2_v2",
+                "small": "Standard_DS3_v2",
+                "medium": "Standard_DS3_v2",
+                "large": "Standard_DS4_v2",
+                "enterprise": "Standard_DS5_v2"
+            },
+            "clusterSize": {
+                "trial": 1,
+                "small": 2,
+                "medium": 3,
+                "large": 6,
+                "enterprise": 6
+            },
+            "jumpboxVmSize": {
+                "trial": "Standard_B1s",
+                "small": "Standard_B1s",
+                "medium": "Standard_B1s",
+                "large": "Standard_B1s",
+                "enterprise": "Standard_B1s"
+            }
+        }
+    },
+    "resources": [
+        {
+            "comments": "Azure tracking GUID for Confluence - ensure right one being used for the delivery channel ie via Azure Marketplace, BitBucket Quickstart etc",
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "pid-de1a11e5-9c17-4538-b570-df707237c073",
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "resources": []
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "vpcTemplate",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('vpcTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "jumpboxVmSize": {
+                        "value": "[if(variables('isConfClusterSizeUsed'), variables('clusterLookup').jumpboxVmSize[parameters('confClusterSize')], parameters('jumpboxVmSize'))]"
+                    },
+                    "sshKey": {
+                        "value": "[parameters('sshKey')]"
+                    },
+                    "sshUserName": {
+                        "value": "[parameters('sshUserName')]"
+                    },
+                    "linuxOsType": {
+                        "value": "[parameters('linuxOsType')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "confluenceTemplate",
+            "dependsOn": [
+                "vpcTemplate"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('confTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "_artifactsLocation": {
+                        "value": "[parameters('_artifactsLocation')]"
+                    },
+                    "_artifactsLocationSasToken": {
+                        "value": "[parameters('_artifactsLocationSasToken')]"
+                    },
+                    "confluenceVersion": {
+                        "value": "[parameters('confluenceVersion')]"
+                    },
+                    "customDownloadUrl": {
+                        "value": "[parameters('customDownloadUrl')]"
+                    },
+                    "clusterSize": {
+                        "value": "[if(variables('isConfClusterSizeUsed'), int(variables('clusterLookup').clusterSize[parameters('confClusterSize')]), parameters('clusterSize'))]"
+                    },
+                    "clusterVmSize": {
+                        "value": "[if(and(not(parameters('isMarketplaceDeployment')), variables('isConfClusterSizeUsed')), variables('clusterLookup').clusterVmSize[parameters('confClusterSize')], parameters('clusterVmSize'))]"
+                    },
+                    "appGtwyClusterSize": {
+                        "value": "[if(variables('isConfClusterSizeUsed'), int(variables('clusterLookup').appGtwySize[parameters('confClusterSize')]), parameters('appGtwyClusterSize'))]"
+                    },
+                    "appGtwyTier": {
+                        "value": "[if(variables('isConfClusterSizeUsed'), variables('clusterLookup').appGtwyTier[parameters('confClusterSize')], parameters('appGtwyTier'))]"
+                    },
+                    "sshKey": {
+                        "value": "[parameters('sshKey')]"
+                    },
+                    "sshUserName": {
+                        "value": "[parameters('sshUserName')]"
+                    },
+                    "dbCreateNew": {
+                        "value": "[parameters('dbCreateNew')]"
+                    },
+                    "dbTier": {
+                        "value": "[if(variables('isConfClusterSizeUsed'), variables('clusterLookup').dbTier[parameters('confClusterSize')], parameters('dbTier'))]"
+                    },
+                    "dbTierSize": {
+                        "value": "[if(variables('isConfClusterSizeUsed'), variables('clusterLookup').dbTierSize[parameters('confClusterSize')], parameters('dbTierSize'))]"
+                    },
+                    "postgresDbSku": {
+                        "value": "[if(variables('isConfClusterSizeUsed'), variables('clusterLookup').postgresDbSku[parameters('confClusterSize')], parameters('postgresDbSku'))]"
+                    },
+                    "postgresDbStorage": {
+                        "value": "[if(variables('isConfClusterSizeUsed'), variables('clusterLookup').postgresDbStorageSize[parameters('confClusterSize')], parameters('postgresDbStorage'))]"
+                    },
+                    "postgresDbCollation": {
+                        "value": "[parameters('postgresDbCollation')]"
+                    },
+                    "dbHost": {
+                        "value": "[if(parameters('dbCreateNew'), variables('dbServerName'), parameters('dbHost'))]"
+                    },
+                    "dbType": {
+                        "value": "[if(equals(parameters('dbType'), 'Azure SQL DB'), 'sqlserver', if(equals(parameters('dbType'), 'Azure DB for PostgreSQL'), 'postgres', 'mysql'))]"
+                    },
+                    "dbPort": {
+                        "value": "[if(parameters('dbCreateNew'), if(equals(parameters('dbType'), 'Azure SQL DB'), '1433', '5432'), parameters('dbPort'))]"
+                    },
+                    "dbDatabase": {
+                        "value": "[parameters('dbDatabase')]"
+                    },
+                    "dbSchema": {
+                        "value": "[if(parameters('dbCreateNew'), if(equals(parameters('dbType'), 'Azure DB for PostgreSQL'), 'public', 'dbo'), parameters('dbSchema'))]"
+                    },
+                    "dbUsername": {
+                        "value": "[if(and(not(parameters('dbCreateNew')), equals(parameters('dbType'), 'Azure DB for PostgreSQL')), split(parameters('dbUsername'), '@')[0], parameters('dbUsername'))]"
+                    },
+                    "dbPassword": {
+                        "value": "[parameters('dbPassword')]"
+                    },
+                    "confAdminUserName": {
+                        "value": "[toLower(parameters('confAdminUserName'))]"
+                    },
+                    "confAdminUserPassword": {
+                        "value": "[parameters('confAdminUserPassword')]"
+                    },
+                    "confAdminUserFullName": {
+                        "value": "[parameters('confAdminUserFullName')]"
+                    },
+                    "confAdminUserEmail": {
+                        "value": "[parameters('confAdminUserEmail')]"
+                    },
+                    "confAppTitle": {
+                        "value": "[parameters('confAppTitle')]"
+                    },
+                    "vnetName": {
+                        "value": "[reference('vpcTemplate').outputs.vnetName.value]"
+                    },
+                    "appSubnetName": {
+                        "value": "[reference('vpcTemplate').outputs.appSubnetName.value]"
+                    },
+                    "gtwySubnetName": {
+                        "value": "[reference('vpcTemplate').outputs.gtwySubnetName.value]"
+                    },
+                    "jumpboxName": {
+                        "value": "[reference('vpcTemplate').outputs.jumpboxName.value]"
+                    },
+                    "jumpboxPublicIpAddress": {
+                        "value": "[reference('vpcTemplate').outputs.jumpboxPublicIpAddress.value]"
+                    },
+                    "sslBase64EncodedPfxCertificate": {
+                        "value": "[parameters('sslBase64EncodedPfxCertificate')]"
+                    },
+                    "sslPfxCertificatePassword": {
+                        "value": "[parameters('sslPfxCertificatePassword')]"
+                    },
+                    "cname": {
+                        "value": "[if(greater(length(parameters('cname')), 0), concat('confluence.', parameters('cname')), parameters('cname'))]"
+                    },
+                    "enableApplicationInsights": {
+                        "value": "[parameters('enableApplicationInsights')]"
+                    },
+                    "enableAnalytics": {
+                        "value": "[parameters('enableAnalytics')]"
+                    },
+                    "enableAcceleratedNetworking": {
+                        "value": "[parameters('enableAcceleratedNetworking')]"
+                    },
+                    "workspaceSku": {
+                        "value": "[ parameters('workspaceSku')]"
+                    },
+                    "clusterVmDiskSize": {
+                        "value": "[parameters('clusterVmDiskSize')]"
+                    },
+                    "clusterVmDiskCount": {
+                        "value": "[parameters('clusterVmDiskCount')]"
+                    },
+                    "linuxOsType": {
+                        "value": "[parameters('linuxOsType')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "domainTemplate",
+            "dependsOn": [
+                "confluenceTemplate"
+            ],
+            "condition": "[greater(length(parameters('cname')), 0)]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('domainTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "cname": {
+                        "value": "[parameters('cname')]"
+                    },
+                    "gtwyIpName": {
+                        "value": "[reference('confluenceTemplate').outputs.gtwyIpName.value]"
+                    },
+                    "prefix": {
+                        "value": "confluence"
+                    }
+                }
+            }
+        },
+        {
+            "apiVersion": "2018-05-01",
+            "name": "alertsTemplate",
+            "type": "Microsoft.Resources/deployments",
+            "condition": "[parameters('enableEmailAlerts')]",
+            "dependsOn": [
+                "confluenceTemplate"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('alertsTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "adminUserEmail": {
+                        "value": "[parameters('confAdminUserEmail')]"
+                    },
+                    "gtwyName": {
+                        "value": "[reference('confluenceTemplate').outputs.gtwyName.value]"
+                    },
+                    "storageAccountName": {
+                        "value": "[reference('confluenceTemplate').outputs.storageAccountName.value]"
+                    },
+                    "clusterName": {
+                        "value": "[reference('confluenceTemplate').outputs.clusterName.value]"
+                    },
+                    "appInsightsName": {
+                        "value": "[if(parameters('enableApplicationInsights'), reference('confluenceTemplate').outputs.appInsightsName.value, '')]"
+                    },
+                    "statusCheckUrl": {
+                        "value": "[concat(if(not(empty(parameters('sslBase64EncodedPfxCertificate'))), concat('https://', if(greater(length(parameters('cname')), 0), reference('domainTemplate').outputs.alias.value, reference('confluenceTemplate').outputs.confAppEndpoint.value)), concat('http://', if(greater(length(parameters('cname')), 0), reference('domainTemplate').outputs.alias.value, reference('confluenceTemplate').outputs.confAppEndpoint.value))), '/status')]"
+                    },
+                    "dbType": {
+                        "value": "[if(equals(parameters('dbType'), 'Azure SQL DB'), 'sqlserver', if(equals(parameters('dbType'), 'Azure DB for PostgreSQL'), 'postgres', 'mysql'))]"
+                    },
+                    "isDbVCoreModel": {
+                        "value": "[contains('GeneralPurpose, BusinessCritical', parameters('dbTier'))]"
+                    },
+                    "dbDatabaseServerName": {
+                        "value": "[split(reference('confluenceTemplate').outputs.dbDatabaseServerName.value, '.')[0]]"
+                    },
+                    "dbDatabaseName": {
+                        "value": "[reference('confluenceTemplate').outputs.dbDatabaseName.value]"
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "appEndpoint": {
+            "type": "string",
+            "value": "[if(not(empty(parameters('sslBase64EncodedPfxCertificate'))), concat('https://', if(greater(length(parameters('cname')), 0), reference('domainTemplate').outputs.alias.value, reference('confluenceTemplate').outputs.confAppEndpoint.value)), concat('http://', if(greater(length(parameters('cname')), 0), reference('domainTemplate').outputs.alias.value, reference('confluenceTemplate').outputs.confAppEndpoint.value)))]"
+        },
+        "bastionUrl": {
+            "type": "string",
+            "value": "[reference('vpcTemplate').outputs.jumpboxPublicEndpoint.value]"
+        },
+        "sshUrl": {
+            "type": "string",
+            "value": "[reference('vpcTemplate').outputs.sshUri.value]"
+        },
+        "jdbcUrl": {
+            "type": "string",
+            "value": "[reference('confluenceTemplate').outputs.jdbcUrl.value]"
+        }
+    }
+}

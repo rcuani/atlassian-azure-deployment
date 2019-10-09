@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<confluence-configuration>
+  <setupStep>complete</setupStep>
+  <setupType>cluster</setupType>
+  <buildNumber>7901</buildNumber>
+  <properties>
+    <property name="admin.ui.allow.daily.backup.custom.location">false</property>
+    <property name="admin.ui.allow.manual.backup.download">false</property>
+    <property name="admin.ui.allow.site.support.email">false</property>
+    <property name="atlassian.license.message">{{CONFLUENCE_LICENSE}}</property>
+    <property name="attachments.dir">${confluenceHome}/attachments</property>
+    <property name="confluence.cluster">true</property>
+    <property name="confluence.cluster.home">{{ATL_CONFLUENCE_SHARED_HOME}}</property>
+    <property name="confluence.cluster.interface">{{CONFLUENCE_CLUSTER_INTERFACE_NAME}}</property>
+    <property name="confluence.cluster.join.type">tcp_ip</property>
+    <property name="confluence.cluster.name">{{SERVER_CLUSTER_NAME}}</property>
+    <property name="confluence.cluster.peers">{{CONFLUENCE_CLUSTER_PEERS}}</property>
+    <property name="confluence.setup.server.id">{{SERVER_ID}}</property>
+    <property name="confluence.webapp.context.path"></property>
+    <property name="hibernate.c3p0.acquire_increment">1</property>
+    <property name="hibernate.c3p0.idle_test_period">100</property>
+    <property name="hibernate.c3p0.max_size">{{CONFLUENCE_C3P0_MAX_SIZE}}</property>
+    <property name="hibernate.c3p0.max_statements">0</property>
+    <property name="hibernate.c3p0.min_size">{{CONFLUENCE_C3P0_MIN_SIZE}}</property>
+    <property name="hibernate.c3p0.validate">true</property>
+    <property name="hibernate.c3p0.preferredTestQuery">select 1</property>
+    <property name="hibernate.c3p0.timeout">30</property>
+    <property name="hibernate.connection.driver_class">{{DB_DRIVER_CLASS}}</property>
+    <property name="hibernate.connection.isolation">2</property>
+    <property name="hibernate.connection.url">{{DB_JDBCURL}}</property>
+    <property name="hibernate.connection.username">{{DB_USER}}</property>
+    <property name="hibernate.connection.password">{{DB_PASSWORD}}</property>
+    <property name="hibernate.database.lower_non_ascii_supported">true</property>
+    <property name="hibernate.dialect">{{DB_DRIVER_DIALECT}}</property>
+    <property name="hibernate.setup">true</property>
+    <property name="jwt.private.key">{{CONFLUENCE_JWT_PRIVATE_KEY}}</property>
+    <property name="jwt.public.key">{{CONFLUENCE_JWT_PUBLIC_KEY}}</property>
+    <property name="lucene.index.dir">${localHome}/index</property>
+    <property name="webwork.multipart.saveDir">${localHome}/temp</property>
+  </properties>
+</confluence-configuration>

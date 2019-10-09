@@ -1,0 +1,306 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "metadata": {
+                "description": "Azure region (WestUS, CentralUs, AustraliaEast, etc) shared by all of the resources in the template"
+            }
+        },
+        "_artifactsLocation": {
+            "type": "string",
+            "defaultValue": "https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/bitbucket/",
+            "metadata": {
+                "description": "The base URI where artifacts required by this template are located"
+            }
+        },
+        "_artifactsLocationSasToken": {
+            "type": "securestring",
+            "metadata": {
+                "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated. Use the defaultValue if the staging location is not secured."
+            },
+            "defaultValue": ""
+        },
+        "bitbucketVersion": {
+            "type": "string",
+            "defaultValue": "latest",
+            "metadata": {
+                "description": "The Bitbucket software product version to install. You can also specify 'latest' to download the latest version available. If using with customDownloadUrl you have to specify the correct version."
+            }
+        },
+        "customDownloadUrl": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Use this URL to override standard Atlassian download url eg for EAP, RC versions. NB will be used in conjunction with the bitbucketVersion parameter."
+            }
+        },
+        "sshUserName": {
+            "type": "string",
+            "metadata": {
+                "description": "Username for SSH access to Bitbucket Server nodes as well as for the jumpbox"
+            }
+        },
+        "sshKey": {
+            "type": "string",
+            "metadata": {
+                "description": "SSH key to allow access to jumpbox."
+            }
+        },
+        "nfsVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_DS3_v2",
+            "allowedValues": [
+                "Standard_D4s_v3",
+                "Standard_D8s_v3",
+                "Standard_D16s_v3",
+                "Standard_D32s_v3",
+                "Standard_D64s_v3",
+                "Standard_DS2_v2",
+                "Standard_DS3_v2",
+                "Standard_DS4_v2",
+                "Standard_DS5_v2",
+                "Standard_DS2",
+                "Standard_DS3",
+                "Standard_DS4",
+                "Standard_B4ms",
+                "Standard_B8ms",
+                "Standard_F2s",
+                "Standard_F4s",
+                "Standard_F8s",
+                "Standard_F16s",
+                "Standard_E4s_v3",
+                "Standard_E8s_v3",
+                "Standard_E16s_v3",
+                "Standard_E32s_v3",
+                "Standard_E64s_v3",
+                "Standard_GS2",
+                "Standard_GS3",
+                "Standard_GS4",
+                "Standard_GS5",
+                "Standard_DS12_v2",
+                "Standard_DS13_v2",
+                "Standard_DS14_v2",
+                "Standard_DS15_v2",
+                "Standard_DS12",
+                "Standard_DS13",
+                "Standard_DS14",
+                "Standard_L4s",
+                "Standard_L8s",
+                "Standard_L16s",
+                "Standard_L32s"
+            ],
+            "metadata": {
+                "description": "The size of the VM that is used for NFS server."
+            }
+        },
+        "nfsDiskSize": {
+            "type": "int",
+            "defaultValue": 128,
+            "allowedValues": [
+                128,
+                256,
+                512,
+                1024,
+                2048,
+                4095
+            ],
+            "metadata": {
+                "description": "The size of the data disk for Git repositories in GB"
+            }
+        },
+        "nfsVmDiskCount": {
+            "type": "int",
+            "defaultValue": 8,
+            "maxValue": 32,
+            "metadata": {
+                "description": "The requested BitBucket NFS disk will be striped for performance. Essentially the desired disk size will be divided by the bbsVmDiskCount and can't exceed 1023 GB. The nfsVmDiskCount count can't exceed the MaxDiskCount assigned to the VM Size."
+            }
+        },
+        "workspaceId": {
+            "type": "string",
+            "metadata": {
+                "description": "The ID of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "workspacePrimaryKey": {
+            "type": "string",
+            "metadata": {
+                "description": "The primary key of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "workspaceSecondaryKey": {
+            "type": "string",
+            "metadata": {
+                "description": "The secondary key of the Azure Operations Management Suite (OMS) workspace."
+            }
+        },
+        "linuxOsType": {
+            "type": "string",
+            "defaultValue": "Canonical:UbuntuServer:18.04-LTS",
+            "allowedValues": [
+                "Canonical:UbuntuServer:16.04-LTS",
+                "Canonical:UbuntuServer:18.04-LTS",
+                "RedHat:RHEL:7.5",
+                "OpenLogic:CentOS:7.5",
+                "credativ:Debian:9-backports"
+            ],
+            "metadata": {
+                "description": "Select your preferred Linux OS type. Bear in mind, the Linux OS type has to support Accelerated Networking as well - https://docs.microsoft.com/en-us/azure/virtual-network/create-vm-accelerated-networking-cli"
+            }
+        },
+        "appInsightsInstrumentKey": {
+            "type": "string",
+            "defaultValue": ""
+        },
+        "vaultName": {
+            "type": "string"
+        },
+        "esLoadBalancerPrivateIp": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "namespace": "bitbucket",
+        "nfsBackupTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-bitbucket-nfs-backup.json', parameters('_artifactsLocationSasToken')))]",
+        "vm": {
+            "nfs": {
+                "name": "[concat(variables('namespace'), '-nfs')]",
+                "size": "[parameters('nfsVmSize')]",
+                "hostname": "bbsnfs"
+            }
+        },
+        "nfs-nic-name": "[concat(variables('namespace'), '-nfs-nic')]",
+        "env.nfs": [
+            "[concat('BBS_VERSION', '=\"', parameters('bitbucketVersion'), '\" ')]",
+            "[concat('BBS_CUSTOM_DOWNLOAD_URL', '=\"', parameters('customDownloadUrl'), '\" ')]",
+            "[concat('ES_LOAD_BALANCER_IP', '=\"', parameters('esLoadBalancerPrivateIp'), '\" ')]",
+            "[concat('OMS_WORKSPACE_ID', '=\"', parameters('workspaceId'), '\" ')]",
+            "[concat('OMS_PRIMARY_KEY', '=\"', parameters('workspacePrimaryKey'), '\" ')]",
+            "[concat('OMS_SECONDARY_KEY', '=\"', parameters('workspaceSecondaryKey'), '\" ')]",
+            "[concat('APPINSIGHTS_VER', '=\"', '2.3.1', '\" ')]",
+            "[concat('APPINSIGHTS_INSTRUMENTATION_KEY', '=\"', parameters('appInsightsInstrumentKey'), '\" ')]"
+        ],
+        "data": {
+            "NFS": "[replace(replace(replace(replace(string(variables('env.nfs')), '[\"', ''), '\"]', ''), '\",\"', ''), '\\\"', '\"')]"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2018-06-01",
+            "location": "[parameters('location')]",
+            "name": "[variables('vm').nfs.name]",
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[variables('vm').nfs.size]"
+                },
+                "osProfile": {
+                    "computerName": "[variables('vm').nfs.hostname]",
+                    "adminUsername": "[parameters('sshUserName')]",
+                    "linuxConfiguration": {
+                        "disablePasswordAuthentication": true,
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/', parameters('sshUserName'), '/.ssh/authorized_keys')]",
+                                    "keyData": "[parameters('sshKey')]"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "storageProfile": {
+                    "imageReference": {
+                        "publisher": "[split(parameters('linuxOsType'), ':')[0]]",
+                        "offer": "[split(parameters('linuxOsType'), ':')[1]]",
+                        "sku": "[split(parameters('linuxOsType'), ':')[2]]",
+                        "version": "latest"
+                    },
+                    "osDisk": {
+                        "createOption": "FromImage"
+                    },
+                    "copy": [
+                        {
+                            "name": "dataDisks",
+                            "count": "[parameters('nfsVmDiskCount')]",
+                            "input": {
+                                "lun": "[copyIndex('dataDisks')]",
+                                "caching": "None",
+                                "createOption": "Empty",
+                                "diskSizeGB": "[if(greater(div(parameters('nfsDiskSize'), parameters('nfsVmDiskCount')), 1020), 1020, div(parameters('nfsDiskSize'), parameters('nfsVmDiskCount')))]",
+                                "managedDisk": {
+                                    "storageAccountType": "Premium_LRS"
+                                }
+                            }
+                        }
+                    ]
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('nfs-nic-name'))]"
+                        }
+                    ]
+                }
+            },
+            "resources": [
+                {
+                    "type": "extensions",
+                    "apiVersion": "2018-06-01",
+                    "location": "[parameters('location')]",
+                    "dependsOn": [
+                        "[variables('vm').nfs.name]"
+                    ],
+                    "name": "script",
+                    "properties": {
+                        "publisher": "Microsoft.Azure.Extensions",
+                        "type": "CustomScript",
+                        "typeHandlerVersion": "2.0",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "fileUris": [
+                                "[concat(uri(parameters('_artifactsLocation'), 'scripts/log.sh'), parameters('_artifactsLocationSasToken'))]",
+                                "[concat(uri(parameters('_artifactsLocation'), 'scripts/vm-disk-utils-0.1.sh') , parameters('_artifactsLocationSasToken'))]",
+                                "[concat(uri(parameters('_artifactsLocation'), 'scripts/bbs_settings.sh'), parameters('_artifactsLocationSasToken'))]",
+                                "[concat(uri(parameters('_artifactsLocation'), 'scripts/nfs_settings.sh'), parameters('_artifactsLocationSasToken'))]",
+                                "[concat(uri(parameters('_artifactsLocation'), 'scripts/settings.sh'), parameters('_artifactsLocationSasToken'))]",
+                                "[concat(uri(parameters('_artifactsLocation'), 'scripts/install.sh'), parameters('_artifactsLocationSasToken'))]",
+                                "[concat(uri(parameters('_artifactsLocation'), 'templates/ApplicationInsights.xml.template'), parameters('_artifactsLocationSasToken'))]",
+                                "[concat(uri(parameters('_artifactsLocation'), 'templates/bitbucket-collectd.conf.template'), parameters('_artifactsLocationSasToken'))]"
+                            ],
+                            "commandToExecute": "[concat(variables('data').NFS, ' bash install.sh nfs 1>&1 2>&1 > ./bbsnfs.install-$(uname -n).log')]"
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "apiVersion": "2018-05-01",
+            "name": "nfsBackupTemplate",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('nfsBackupTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "vaultName": {
+                        "value": "[parameters('vaultName')]"
+                    },
+                    "nfsVmName": {
+                        "value": "[variables('vm').nfs.name]"
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "cmd": {
+            "type": "string",
+            "value": "[concat(variables('data').NFS, ' bash install.sh nfs')]"
+        }
+    }
+}

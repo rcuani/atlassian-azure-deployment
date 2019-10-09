@@ -1,0 +1,1238 @@
+FQDNLookup   true
+BaseDir     "/var/lib/collectd"
+PIDFile     "/var/run/collectd.pid"
+PluginDir   "/usr/lib/collectd"
+TypesDB     "/usr/share/collectd/types.db"
+
+#AutoLoadPlugin false
+Interval     10
+Timeout      2
+ReadThreads  5
+WriteThreads 5
+
+#LoadPlugin syslog
+LoadPlugin logfile
+
+# Write the collectd output to a file in /var/log
+<Plugin "logfile">
+    LogLevel "info"
+    File "/var/log/collectd.log"
+    Timestamp true
+</Plugin>
+
+# Use the aggregation plugin to aggregate specific statistics
+LoadPlugin aggregation
+<Plugin aggregation>
+    # Aggregate CPU cores
+    <Aggregation>
+        Plugin "cpu"
+        Type "cpu"
+        GroupBy "Host"
+        GroupBy "TypeInstance"
+        CalculateSum true
+        CalculateAverage true
+    </Aggregation>
+</Plugin>
+
+# Collect CPU statistics
+LoadPlugin cpu
+
+# Write collected statistics in CSV format
+LoadPlugin csv
+<Plugin csv>
+    DataDir "/var/lib/collectd/csv"
+    StoreRates false
+</Plugin>
+
+# Collect partition usage statistics
+LoadPlugin df
+<Plugin df>
+    MountPoint "/"
+    MountPoint "/media/ephemeral0"
+    MountPoint "/media/atl"
+    IgnoreSelected false
+    ReportByDevice false
+    ReportInodes false
+    ValuesAbsolute true
+    ValuesPercentage false
+</Plugin>
+
+# Collect disk IO statistics
+LoadPlugin disk
+<Plugin disk>
+    Disk "xvda"
+    Disk "xvdb"
+    Disk "xvdf"
+    IgnoreSelected false
+</Plugin>
+
+# Collect statistics from an external process or script
+# LoadPlugin exec
+
+# Collect network interface usage statistics
+LoadPlugin interface
+<Plugin interface>
+    Interface "lo"
+    IgnoreSelected true
+</Plugin>
+
+# Collect system load statistics
+LoadPlugin load
+
+# Collect memory utilization statistics
+LoadPlugin memory
+<Plugin memory>
+    # Don't use absolute as each AWS ec2 instance is different, use percentage instead to get a uniform view
+    ValuesAbsolute false
+    ValuesPercentage true
+</Plugin>
+
+# Collect Nginx statistics
+# LoadPlugin nginx
+
+# Collect PostgreSQL statistics
+# LoadPlugin postgresql
+
+# Added NFS stats 
+LoadPlugin nfs
+
+LoadPlugin processes
+<Plugin processes>
+    ProcessMatch git "^git.*"
+</Plugin>
+
+# Python plugin for Python based plugins
+# LoadPlugin python
+
+# Write statistics to rrdcached daemon
+#LoadPlugin rrdcached
+#<Plugin "rrdcached">
+#   DaemonAddress "unix:/var/run/rrdcached.sock"
+#</Plugin>
+
+# Write statistics to local rrd databases
+LoadPlugin rrdtool
+<Plugin rrdtool>
+    DataDir "/var/lib/collectd/rrd"
+    CacheFlush 120
+    WritesPerSecond 50
+</Plugin>
+
+# Collect swap statistics
+LoadPlugin swap
+<Plugin "swap">
+    ReportByDevice false
+    ReportBytes true
+</Plugin>
+
+# Load the Java plugin
+LoadPlugin java
+<Plugin java>
+    JVMArg "-verbose:jni"
+    JVMArg "-Djava.class.path=/usr/share/collectd/java/jaxb-api-2.3.1.jar:/usr/share/collectd/java/applicationinsights-collectd-${APPINSIGHTS_VER}.jar:/usr/share/collectd/java/collectd-api.jar:/usr/share/collectd/java/generic-jmx.jar"
+
+    # Enabling Application Insights plugin
+    LoadPlugin "com.microsoft.applicationinsights.collectd.ApplicationInsightsWriter"
+
+    # Configuring Application Insights plugin
+    <Plugin ApplicationInsightsWriter>
+        InstrumentationKey "${APPINSIGHTS_INSTRUMENTATION_KEY}"
+        SDKLogger true
+    </Plugin>
+
+    # Collect JMX statistics
+    LoadPlugin "org.collectd.java.GenericJMX"
+    <Plugin "GenericJMX">
+
+	<MBean "com.atlassian.bitbucket/SshHostingStatistics">
+            ObjectName "com.atlassian.bitbucket:name=SshHostingStatistics"
+            InstancePrefix "com.atlassian.bitbucket/SshHostingStatistics"
+
+	    <Value>
+            Type "gauge"
+            InstancePrefix "CloneCacheBypass"
+            Attribute "CloneCacheBypass"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "CloneCacheHit"
+            Attribute "CloneCacheHit"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "CloneCacheMiss"
+            Attribute "CloneCacheMiss"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "CloneRequestCount"
+            Attribute "CloneRequestCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "FetchRequestCount"
+            Attribute "FetchRequestCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalBytesRead"
+            Attribute "TotalBytesRead"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalBytesWritten"
+            Attribute "TotalBytesWritten"
+            </Value>
+        </MBean>
+	
+	<MBean "com.atlassian.bitbucket/HttpHostingStatistics">
+            ObjectName "com.atlassian.bitbucket:name=HttpHostingStatistics"
+            InstancePrefix "com.atlassian.bitbucket/HttpHostingStatistics"
+
+	    <Value>
+            Type "gauge"
+            InstancePrefix "CloneCacheBypass"
+            Attribute "CloneCacheBypass"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "CloneCacheHit"
+            Attribute "CloneCacheHit"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "CloneCacheMiss"
+            Attribute "CloneCacheMiss"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "CloneRequestCount"
+            Attribute "CloneRequestCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "FetchRequestCount"
+            Attribute "FetchRequestCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalBytesRead"
+            Attribute "TotalBytesRead"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalBytesWritten"
+            Attribute "TotalBytesWritten"
+        </Value>
+	</MBean>
+
+	<MBean "com.atlassian.webhooks/WebHooks">
+            ObjectName "com.atlassian.webhooks:name=Webhooks"
+            InstancePrefix "com.atlassian.webhooks/Webhooks"
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "PublishCount"
+            Attribute "PublishCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "DispatchSuccessCount"
+            Attribute "DispatchSuccessCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "DispatchRejectedCount"
+            Attribute "DispatchRejectedCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "DispatchLastRejectedTimestamp"
+            Attribute "DispatchLastRejectedTimestamp"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "DispatchInFlightCount"
+            Attribute "DispatchInFlightCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "DispatchFailureCount"
+            Attribute "DispatchFailureCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "DispatchErrorCount"
+            Attribute "DispatchErrorCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "DispatchCount"
+            Attribute "DispatchCount"
+        </Value>
+	</MBean>
+
+    <MBean "com.atlassian.bitbucket/ClusterLocks">
+            ObjectName "com.atlassian.bitbucket:name=ClusterLocks"
+            InstancePrefix "com.atlassian.bitbucket/ClusterLocks"
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "LockedCount"
+            Attribute "LockedCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "QueuedThreadCount"
+            Attribute "QueuedThreadCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalAcquiredCount"
+            Attribute "TotalAcquiredCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalAcquireErrorCount"
+            Attribute "TotalAcquireErrorCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalAcquireTimeMillis"
+            Attribute "TotalAcquireTimeMillis"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalReleasedCount"
+            Attribute "TotalReleasedCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "TotalReleaseErrorCount"
+            Attribute "TotalReleaseErrorCount"
+        </Value>
+    </MBean>
+
+    <MBean "com.atlassian.bitbucket/EventStatistics">
+           ObjectName "com.atlassian.bitbucket:name=EventStatistics"
+           InstancePrefix "com.atlassian.bitbucket/EventStatistics"
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "DispatchedCount"
+            Attribute "DispatchedCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "PublishedCount"
+            Attribute "PublishedCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "QueueCapacity"
+            Attribute "QueueCapacity"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "QueueLength"
+            Attribute "QueueLength"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "RejectedCount"
+            Attribute "RejectedCount"
+        </Value>
+
+        <Value>
+            Type "gauge"
+            InstancePrefix "RemainingQueueCapacity"
+            Attribute "RemainingQueueCapacity"
+        </Value>
+	</MBean>
+
+        # Bitbucket server JMX configuration
+        <MBean "com.atlassian.bitbucket/CommandTickets">
+            ObjectName "com.atlassian.bitbucket:name=CommandTickets"
+            InstancePrefix "com.atlassian.bitbucket/CommandTickets"
+
+            # fqname = com.atlassian.bitbucket/CommandTickets#Available
+            <Value>
+                Type "gauge"
+                InstancePrefix "Available"
+                Attribute "Available"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket/CommandTickets#QueuedRequests
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueuedRequests"
+                Attribute "QueuedRequests"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket/CommandTickets#Total
+            <Value>
+                Type "gauge"
+                InstancePrefix "Total"
+                Attribute "Total"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket/CommandTickets#Used
+            <Value>
+                Type "gauge"
+                InstancePrefix "Used"
+                Attribute "Used"
+            </Value>
+        </MBean>
+
+        <MBean "com.atlassian.bitbucket.thread-pools/EventThreadPool">
+            ObjectName "com.atlassian.bitbucket.thread-pools:name=EventThreadPool"
+            InstancePrefix "com.atlassian.bitbucket.thread-pools/EventThreadPool"
+
+            # fqname = com.atlassian.bitbucket.thread-pools/EventThreadPool#ActiveCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "ActiveCount"
+                Attribute "ActiveCount"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/EventThreadPool#CompletedTaskCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CompletedTaskCount"
+                Attribute "CompletedTaskCount"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/EventThreadPool#LargestPoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "LargestPoolSize"
+                Attribute "LargestPoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/EventThreadPool#MaximumPoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "MaximumPoolSize"
+                Attribute "MaximumPoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/EventThreadPool#PoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "PoolSize"
+                Attribute "PoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/EventThreadPool#QueueLength
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueueLength"
+                Attribute "QueueLength"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/EventThreadPool#TaskCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "TaskCount"
+                Attribute "TaskCount"
+            </Value>
+        </MBean>
+
+        <MBean "com.hazelcast/HazelcastInstance.OperationService.hazelcast.operationServicehazelcast">
+            ObjectName "com.hazelcast:instance=hazelcast,name=operationServicehazelcast,type=HazelcastInstance.OperationService"
+            InstancePrefix "com.hazelcast/HazelcastInstance.OperationService.hazelcast.operationServicehazelcast"
+
+            # fqname = com.hazelcast/HazelcastInstance.OperationService.hazelcast.operationServicehazelcast#executedOperationCount
+            <Value>
+                Type "derive"
+                InstancePrefix "executedOperationCount"
+                Attribute "executedOperationCount"
+            </Value>
+
+            # fqname = com.hazelcast/HazelcastInstance.OperationService.hazelcast.operationServicehazelcast#operationThreadCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "operationThreadCount"
+                Attribute "operationThreadCount"
+            </Value>
+
+            # fqname = com.hazelcast/HazelcastInstance.OperationService.hazelcast.operationServicehazelcast#remoteOperationCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "remoteOperationCount"
+                Attribute "remoteOperationCount"
+            </Value>
+
+            # fqname = com.hazelcast/HazelcastInstance.OperationService.hazelcast.operationServicehazelcast#responseQueueSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "responseQueueSize"
+                Attribute "responseQueueSize"
+            </Value>
+
+            # fqname = com.hazelcast/HazelcastInstance.OperationService.hazelcast.operationServicehazelcast#runningOperationsCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "runningOperationsCount"
+
+                Attribute "runningOperationsCount"
+            </Value>
+        </MBean>
+
+        <MBean "com.hazelcast/HazelcastInstance.EventService.hazelcast.hazelcast">
+            ObjectName "com.hazelcast:instance=hazelcast,name=hazelcast,type=HazelcastInstance.EventService"
+            InstancePrefix "com.hazelcast/HazelcastInstance.EventService.hazelcast.hazelcast"
+
+            # fqname = com.hazelcast/HazelcastInstance.EventService.hazelcast.hazelcast#eventThreadCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "eventThreadCount"
+                Attribute "eventThreadCount"
+            </Value>
+
+            # fqname = com.hazelcast/HazelcastInstance.EventService.hazelcast.hazelcast#eventQueueCapacity
+            <Value>
+                Type "gauge"
+                InstancePrefix "eventQueueCapacity"
+                Attribute "eventQueueCapacity"
+            </Value>
+
+            # fqname = com.hazelcast/HazelcastInstance.EventService.hazelcast.hazelcast#eventQueueSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "eventQueueSize"
+                Attribute "eventQueueSize"
+            </Value>
+        </MBean>
+
+        <MBean "org.hibernate.core/">
+            ObjectName "org.hibernate.core:serviceRole=org.hibernate.stat.Statistics,serviceType=org.hibernate.stat.internal.StatisticsImpl,sessionFactory=bitbucket.core"
+            InstancePrefix "org.hibernate.core/"
+
+            # fqname = org.hibernate.core/#CloseStatementCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CloseStatementCount"
+                Attribute "CloseStatementCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#CollectionFetchCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CollectionFetchCount"
+                Attribute "CollectionFetchCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#CollectionLoadCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CollectionLoadCount"
+                Attribute "CollectionLoadCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#CollectionRecreateCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CollectionRecreateCount"
+                Attribute "CollectionRecreateCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#CollectionRemoveCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CollectionRemoveCount"
+                Attribute "CollectionRemoveCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#CollectionUpdateCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CollectionUpdateCount"
+                Attribute "CollectionUpdateCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#ConnectCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "ConnectCount"
+                Attribute "ConnectCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#EntityDeleteCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "EntityDeleteCount"
+                Attribute "EntityDeleteCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#EntityFetchCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "EntityFetchCount"
+                Attribute "EntityFetchCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#EntityInsertCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "EntityInsertCount"
+                Attribute "EntityInsertCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#EntityLoadCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "EntityLoadCount"
+                Attribute "EntityLoadCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#EntityUpdateCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "EntityUpdateCount"
+                Attribute "EntityUpdateCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#FlushCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "FlushCount"
+                Attribute "FlushCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#NaturalIdCacheHitCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "NaturalIdCacheHitCount"
+                Attribute "NaturalIdCacheHitCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#NaturalIdCacheMissCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "NaturalIdCacheMissCount"
+                Attribute "NaturalIdCacheMissCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#NaturalIdCachePutCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "NaturalIdCachePutCount"
+                Attribute "NaturalIdCachePutCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#NaturalIdQueryExecutionCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "NaturalIdQueryExecutionCount"
+                Attribute "NaturalIdQueryExecutionCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#NaturalIdQueryExecutionMaxTime
+            <Value>
+                Type "gauge"
+                InstancePrefix "NaturalIdQueryExecutionMaxTime"
+                Attribute "NaturalIdQueryExecutionMaxTime"
+            </Value>
+
+            # fqname = org.hibernate.core/#OptimisticFailureCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "OptimisticFailureCount"
+                Attribute "OptimisticFailureCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#PrepareStatementCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "PrepareStatementCount"
+                Attribute "PrepareStatementCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#QueryCacheHitCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueryCacheHitCount"
+                Attribute "QueryCacheHitCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#QueryCacheMissCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueryCacheMissCount"
+                Attribute "QueryCacheMissCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#QueryCachePutCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueryCachePutCount"
+                Attribute "QueryCachePutCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#QueryExecutionCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueryExecutionCount"
+                Attribute "QueryExecutionCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#QueryExecutionMaxTime
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueryExecutionMaxTime"
+                Attribute "QueryExecutionMaxTime"
+            </Value>
+
+            # fqname = org.hibernate.core/#SecondLevelCacheHitCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "SecondLevelCacheHitCount"
+                Attribute "SecondLevelCacheHitCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#SecondLevelCacheMissCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "SecondLevelCacheMissCount"
+                Attribute "SecondLevelCacheMissCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#SecondLevelCachePutCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "SecondLevelCachePutCount"
+                Attribute "SecondLevelCachePutCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#SessionCloseCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "SessionCloseCount"
+                Attribute "SessionCloseCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#TransactionCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "TransactionCount"
+                Attribute "TransactionCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#UpdateTimestampsCacheHitCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "UpdateTimestampsCacheHitCount"
+                Attribute "UpdateTimestampsCacheHitCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#UpdateTimestampsCacheMissCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "UpdateTimestampsCacheMissCount"
+                Attribute "UpdateTimestampsCacheMissCount"
+            </Value>
+
+            # fqname = org.hibernate.core/#UpdateTimestampsCachePutCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "UpdateTimestampsCachePutCount"
+                Attribute "UpdateTimestampsCachePutCount"
+            </Value>
+        </MBean>
+
+        <MBean "com.zaxxer.hikari/Poolbitbucket">
+            ObjectName "com.zaxxer.hikari:type=Pool (bitbucket)"
+            InstancePrefix "com.zaxxer.hikari/Poolbitbucket"
+
+            # fqname = com.zaxxer.hikari/Poolbitbucket#ActiveConnections
+            <Value>
+                Type "gauge"
+                InstancePrefix "ActiveConnections"
+                Attribute "ActiveConnections"
+            </Value>
+
+            # fqname = com.zaxxer.hikari/Poolbitbucket#IdleConnections
+            <Value>
+                Type "gauge"
+                InstancePrefix "IdleConnections"
+                Attribute "IdleConnections"
+            </Value>
+
+            # fqname = com.zaxxer.hikari/Poolbitbucket#ThreadsAwaitingConnection
+            <Value>
+                Type "gauge"
+                InstancePrefix "ThreadsAwaitingConnection"
+                Attribute "ThreadsAwaitingConnection"
+            </Value>
+
+            # fqname = com.zaxxer.hikari/Poolbitbucket#TotalConnections
+            <Value>
+                Type "gauge"
+                InstancePrefix "TotalConnections"
+                Attribute "TotalConnections"
+            </Value>
+        </MBean>
+
+        <MBean "com.atlassian.bitbucket/HostingTickets">
+            ObjectName "com.atlassian.bitbucket:name=HostingTickets"
+            InstancePrefix "com.atlassian.bitbucket/HostingTickets"
+
+            # fqname = com.atlassian.bitbucket/HostingTickets#Available
+            <Value>
+                Type "gauge"
+                InstancePrefix "Available"
+                Attribute "Available"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket/HostingTickets#QueuedRequests
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueuedRequests"
+                Attribute "QueuedRequests"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket/HostingTickets#Total
+            <Value>
+                Type "gauge"
+                InstancePrefix "Total"
+                Attribute "Total"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket/HostingTickets#Used
+            <Value>
+                Type "gauge"
+                InstancePrefix "Used"
+                Attribute "Used"
+            </Value>
+        </MBean>
+
+        <MBean "com.atlassian.bitbucket.thread-pools/IoPumpThreadPool">
+            ObjectName "com.atlassian.bitbucket.thread-pools:name=IoPumpThreadPool"
+            InstancePrefix "com.atlassian.bitbucket.thread-pools/IoPumpThreadPool"
+
+            # fqname = com.atlassian.bitbucket.thread-pools/IoPumpThreadPool#ActiveCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "ActiveCount"
+                Attribute "ActiveCount"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/IoPumpThreadPool#CompletedTaskCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CompletedTaskCount"
+                Attribute "CompletedTaskCount"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/IoPumpThreadPool#LargestPoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "LargestPoolSize"
+                Attribute "LargestPoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/IoPumpThreadPool#MaximumPoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "MaximumPoolSize"
+                Attribute "MaximumPoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/IoPumpThreadPool#PoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "PoolSize"
+                Attribute "PoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/IoPumpThreadPool#QueueLength
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueueLength"
+                Attribute "QueueLength"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/IoPumpThreadPool#TaskCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "TaskCount"
+                Attribute "TaskCount"
+            </Value>
+        </MBean>
+
+        <MBean "com.atlassian.bitbucket/Projects">
+            ObjectName "com.atlassian.bitbucket:name=Projects"
+            InstancePrefix "com.atlassian.bitbucket/Projects"
+
+            # fqname = com.atlassian.bitbucket/Projects#Count
+            <Value>
+                Type "gauge"
+                InstancePrefix "Count"
+                Attribute "Count"
+            </Value>
+        </MBean>
+
+        <MBean "com.atlassian.bitbucket/Repositories">
+            ObjectName "com.atlassian.bitbucket:name=Repositories"
+            InstancePrefix "com.atlassian.bitbucket/Repositories"
+
+            # fqname = com.atlassian.bitbucket/Repositories#Count
+            <Value>
+                Type "gauge"
+                InstancePrefix "Count"
+                Attribute "Count"
+            </Value>
+        </MBean>
+
+        <MBean "com.atlassian.bitbucket.thread-pools/ScheduledThreadPool">
+            ObjectName "com.atlassian.bitbucket.thread-pools:name=ScheduledThreadPool"
+            InstancePrefix "com.atlassian.bitbucket.thread-pools/ScheduledThreadPool"
+
+            # fqname = com.atlassian.bitbucket.thread-pools/ScheduledThreadPool#ActiveCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "ActiveCount"
+                Attribute "ActiveCount"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/ScheduledThreadPool#CompletedTaskCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "CompletedTaskCount"
+                Attribute "CompletedTaskCount"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/ScheduledThreadPool#LargestPoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "LargestPoolSize"
+                Attribute "LargestPoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/ScheduledThreadPool#MaximumPoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "MaximumPoolSize"
+                Attribute "MaximumPoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/ScheduledThreadPool#PoolSize
+            <Value>
+                Type "gauge"
+                InstancePrefix "PoolSize"
+                Attribute "PoolSize"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/ScheduledThreadPool#QueueLength
+            <Value>
+                Type "gauge"
+                InstancePrefix "QueueLength"
+                Attribute "QueueLength"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket.thread-pools/ScheduledThreadPool#TaskCount
+            <Value>
+                Type "gauge"
+                InstancePrefix "TaskCount"
+                Attribute "TaskCount"
+            </Value>
+        </MBean>
+
+        <MBean "com.atlassian.bitbucket/ScmStatistics">
+            ObjectName "com.atlassian.bitbucket:name=ScmStatistics"
+            InstancePrefix "com.atlassian.bitbucket/ScmStatistics"
+
+            # fqname = com.atlassian.bitbucket/ScmStatistics#Pulls
+            <Value>
+                Type "gauge"
+                InstancePrefix "Pulls"
+                Attribute "Pulls"
+            </Value>
+
+            # fqname = com.atlassian.bitbucket/ScmStatistics#Pushes
+            <Value>
+                Type "gauge"
+                InstancePrefix "Pushes"
+                Attribute "Pushes"
+            </Value>
+        </MBean>
+
+        # Apache Tomcat JMX configuration
+        <MBean "catalina/global_request_processor">
+            ObjectName "Catalina:type=GlobalRequestProcessor,*"
+            InstancePrefix "catalina_request_processor-"
+            InstanceFrom "name"
+
+            <Value>
+                Type "io_octets"
+                InstancePrefix "global"
+                #InstanceFrom ""
+                Table false
+                Attribute "bytesReceived"
+                Attribute "bytesSent"
+            </Value>
+
+            <Value>
+                Type "total_requests"
+                InstancePrefix "global"
+                #InstanceFrom ""
+                Table false
+                Attribute "requestCount"
+            </Value>
+
+            <Value>
+                Type "total_time_in_ms"
+                InstancePrefix "global-processing"
+                #InstanceFrom ""
+                Table false
+                Attribute "processingTime"
+            </Value>
+        </MBean>
+
+        <MBean "catalina/detailed_request_processor">
+            ObjectName "Catalina:type=RequestProcessor,*"
+            InstancePrefix "catalina_request_processor-"
+            InstanceFrom "worker"
+
+            <Value>
+                Type "io_octets"
+                #InstancePrefix ""
+                InstanceFrom "name"
+                Table false
+                Attribute "bytesReceived"
+                Attribute "bytesSent"
+            </Value>
+
+            <Value>
+                Type "total_requests"
+                #InstancePrefix ""
+                InstanceFrom "name"
+                Table false
+                Attribute "requestCount"
+            </Value>
+
+            <Value>
+                Type "total_time_in_ms"
+                InstancePrefix "processing-"
+                InstanceFrom "name"
+                Table false
+                Attribute "processingTime"
+            </Value>
+        </MBean>
+
+        <MBean "catalina/thread_pool">
+            ObjectName "Catalina:type=ThreadPool,*"
+            InstancePrefix "request_processor-"
+            InstanceFrom "name"
+
+            <Value>
+                Type "threads"
+                InstancePrefix "total"
+                #InstanceFrom ""
+                Table false
+                Attribute "currentThreadCount"
+            </Value>
+
+            <Value>
+                Type "threads"
+                InstancePrefix "running"
+                #InstanceFrom ""
+                Table false
+                Attribute "currentThreadsBusy"
+            </Value>
+        </MBean>
+
+        # General JVM configuration
+        <MBean "memory">
+            ObjectName "java.lang:type=Memory,*"
+            InstancePrefix "java_memory"
+            #InstanceFrom "name"
+
+            <Value>
+                Type "memory"
+                InstancePrefix "heap-"
+                #InstanceFrom ""
+                Table true
+                Attribute "HeapMemoryUsage"
+            </Value>
+
+            <Value>
+                Type "memory"
+                InstancePrefix "nonheap-"
+                #InstanceFrom ""
+                Table true
+                Attribute "NonHeapMemoryUsage"
+            </Value>
+        </MBean>
+
+        <MBean "memory_pool">
+            ObjectName "java.lang:type=MemoryPool,*"
+            InstancePrefix "java_memory_pool-"
+            InstanceFrom "name"
+
+            <Value>
+                Type "memory"
+                #InstancePrefix ""
+                #InstanceFrom ""
+                Table true
+                Attribute "Usage"
+            </Value>
+        </MBean>
+
+        <MBean "classes">
+            ObjectName "java.lang:type=ClassLoading"
+            InstancePrefix "java"
+            #InstanceFrom ""
+
+            <Value>
+                Type "gauge"
+                InstancePrefix "loaded_classes"
+                #InstanceFrom ""
+                Table false
+                Attribute "LoadedClassCount"
+            </Value>
+        </MBean>
+
+        <MBean "compilation">
+            ObjectName "java.lang:type=Compilation"
+            InstancePrefix "java"
+            #InstanceFrom ""
+
+            <Value>
+                Type "total_time_in_ms"
+                InstancePrefix "compilation_time"
+                #InstanceFrom ""
+                Table false
+                Attribute "TotalCompilationTime"
+            </Value>
+        </MBean>
+
+        <MBean "garbage_collector">
+            ObjectName "java.lang:type=GarbageCollector,*"
+            InstancePrefix "java_gc-"
+            InstanceFrom "name"
+
+            <Value>
+                Type "invocations"
+                #InstancePrefix ""
+                #InstanceFrom ""
+                Table false
+                Attribute "CollectionCount"
+            </Value>
+
+            <Value>
+                Type "total_time_in_ms"
+                InstancePrefix "collection_time"
+                #InstanceFrom ""
+                Table false
+                Attribute "CollectionTime"
+            </Value>
+        </MBean>
+
+        <MBean "jvm_localhost_os">
+            ObjectName "java.lang:type=OperatingSystem"
+
+            # Open file descriptors
+            <Value>
+                Type "gauge"
+                InstancePrefix "os-open_fd_count"
+                Table false
+                Attribute "OpenFileDescriptorCount"
+            </Value>
+
+            # Max. allowed handles for user under which the JavaVM is running
+            <Value>
+                Type "gauge"
+                InstancePrefix "os-max_fd_count"
+                Table false
+                Attribute "MaxFileDescriptorCount"
+            </Value>
+
+            # Process time used by the JavaVM
+            <Value>
+                Type "counter"
+                InstancePrefix "os-process_cpu_time"
+                Table false
+                Attribute "ProcessCpuTime"
+            </Value>
+        </MBean>
+
+        <Connection>
+            #Host "localhost"
+            ServiceURL "service:jmx:rmi:///jndi/rmi://localhost:9999/jmxrmi"
+            User "monitorRole"
+
+            Collect "com.atlassian.bitbucket/SshHostingStatistics"
+            Collect "com.atlassian.bitbucket/HttpHostingStatistics"
+            Collect "com.atlassian.bitbucket/EventStatistics"
+            Collect "com.atlassian.bitbucket/ClusterLocks"
+            Collect "com.atlassian.webhooks/WebHooks"
+
+            # CommandTickets
+            Collect "com.atlassian.bitbucket/CommandTickets"
+            # EventThreadPool
+            Collect "com.atlassian.bitbucket.thread-pools/EventThreadPool"
+            # Hazelcast
+            Collect "com.hazelcast/HazelcastInstance.OperationService.hazelcast.operationServicehazelcast"
+            # Hibernate
+            Collect "org.hibernate.core/"
+            # Hikari
+            Collect "com.zaxxer.hikari/Poolbitbucket"
+            # HostingTickets
+            Collect "com.atlassian.bitbucket/HostingTickets"
+            # IoPumpThreadPool
+            Collect "com.atlassian.bitbucket.thread-pools/IoPumpThreadPool"
+            # Projects
+            Collect "com.atlassian.bitbucket/Projects"
+            # Repositories
+            Collect "com.atlassian.bitbucket/Repositories"
+            # ScheduledThreadPool
+            Collect "com.atlassian.bitbucket.thread-pools/ScheduledThreadPool"
+            # ScmStatistics
+            Collect "com.atlassian.bitbucket/ScmStatistics"
+
+            # Tomcat
+            #Collect "catalina/global_request_processor"
+            #Collect "catalina/detailed_request_processor"
+            #Collect "catalina/thread_pool"
+
+            # JVM
+            Collect "memory"
+            Collect "memory_pool"
+            Collect "classes"
+            Collect "compilation"
+            Collect "garbage_collector"
+            Collect "jvm_localhost_os"
+        </Connection>
+    </Plugin>
+</Plugin>

@@ -1,0 +1,130 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "vaultName": {
+            "type": "string",
+            "metadata": {
+                "description": "Vault Name"
+            }
+        },
+        "nfsVmName": {
+            "type": "string",
+            "metadata": {
+                "description": "Vault Name"
+            }
+        }
+    },
+    "variables": {
+        "policyName": "NFSBackupPolicy",
+        "schedule": {
+            "scheduleRunFrequency": "Daily",
+            "scheduleRunDays": null,
+            "scheduleRunTimes": [
+                "2019-01-01T21:00:00.000Z"
+            ],
+            "schedulePolicyType": "SimpleSchedulePolicy"
+        },
+        "retention": {
+            "dailySchedule": {
+                "retentionTimes": [
+                    "2019-01-01T21:00:00.000Z"
+                ],
+                "retentionDuration": {
+                    "count": 7,
+                    "durationType": "Days"
+                }
+            },
+            "weeklySchedule": {
+                "daysOfTheWeek": [
+                    "Sunday"
+                ],
+                "retentionTimes": [
+                    "2019-01-01T21:00:00.000Z"
+                ],
+                "retentionDuration": {
+                    "count": 4,
+                    "durationType": "Weeks"
+                }
+            },
+            "monthlySchedule": {
+                "retentionScheduleFormatType": "Weekly",
+                "retentionScheduleDaily": null,
+                "retentionScheduleWeekly": {
+                    "daysOfTheWeek": [
+                        "Sunday"
+                    ],
+                    "weeksOfTheMonth": [
+                        "First"
+                    ]
+                },
+                "retentionTimes": [
+                    "2019-01-01T21:00:00.000Z"
+                ],
+                "retentionDuration": {
+                    "count": 12,
+                    "durationType": "Months"
+                }
+            },
+            "yearlySchedule": {
+                "retentionScheduleFormatType": "Weekly",
+                "monthsOfYear": [
+                    "January"
+                ],
+                "retentionScheduleDaily": null,
+                "retentionScheduleWeekly": {
+                    "daysOfTheWeek": [
+                        "Sunday"
+                    ],
+                    "weeksOfTheMonth": [
+                        "First"
+                    ]
+                },
+                "retentionTimes": [
+                    "2019-01-01T21:00:00.000Z"
+                ],
+                "retentionDuration": {
+                    "count": 10,
+                    "durationType": "Years"
+                }
+            },
+            "retentionPolicyType": "LongTermRetentionPolicy"
+        },
+        "timeZone": "UTC",
+        "fabricName": "Azure",
+        "v2VmContainer": "iaasvmcontainer;iaasvmcontainerv2;",
+        "v2Vm": "vm;iaasvmcontainerv2;",
+        "existingVirtualMachines": "[array(parameters('nfsVmName'))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.RecoveryServices/vaults/backupPolicies",
+            "apiVersion": "2016-12-01",
+            "name": "[concat(parameters('vaultName'), '/', variables('policyName'))]",
+            "properties": {
+                "backupManagementType": "AzureIaasVM",
+                "schedulePolicy": "[variables('schedule')]",
+                "retentionPolicy": "[variables('retention')]",
+                "timeZone": "[variables('timeZone')]"
+            }
+        },
+        {
+            "type": "Microsoft.RecoveryServices/vaults/backupFabrics/protectionContainers/protectedItems",
+            "apiVersion": "2016-12-01",
+            "name": "[concat(parameters('vaultName'), '/', variables('fabricName'), '/', variables('v2VmContainer'), concat(resourceGroup().name,';',variables('existingVirtualMachines')[copyIndex()]), '/', variables('v2Vm'), concat(resourceGroup().name,';',variables('existingVirtualMachines')[copyIndex()]))]",
+            "dependsOn": [
+                "[concat('Microsoft.RecoveryServices/vaults', '/', parameters('vaultName'), '/backupPolicies/', variables('policyName'))]"
+            ],
+            "properties": {
+                "protectedItemType": "Microsoft.Compute/virtualMachines",
+                "policyId": "[resourceId('Microsoft.RecoveryServices/vaults/backupPolicies', parameters('vaultName'), variables('policyName'))]",
+                "sourceResourceId": "[resourceId('Microsoft.Compute/virtualMachines',parameters('nfsVmName'))]"
+            },
+            "copy": {
+                "name": "v2VmsCopy",
+                "count": "[length(variables('existingVirtualMachines'))]"
+            }
+        }
+    ],
+    "outputs": {}
+}

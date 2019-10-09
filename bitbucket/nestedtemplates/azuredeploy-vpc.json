@@ -1,0 +1,754 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "metadata": {
+                "description": "Azure region (WestUS, CentralUs, AustraliaEast, etc) shared by all of the resources in the template"
+            }
+        },
+        "_artifactsLocation": {
+            "type": "string",
+            "metadata": {
+                "description": "The base URI where artifacts required by this template are located"
+            }
+        },
+        "_artifactsLocationSasToken": {
+            "type": "securestring",
+            "metadata": {
+                "description": "The sasToken required to access _artifactsLocation.  When the template is deployed using the accompanying scripts, a sasToken will be automatically generated. Use the defaultValue if the staging location is not secured."
+            }
+        },
+        "vnetCIDR": {
+            "type": "string",
+            "defaultValue": "10.0.0.0/16",
+            "metadata": {
+                "description": "Address space for the Virtual Network created by the template"
+            }
+        },
+        "publicNetCIDR": {
+            "type": "string",
+            "defaultValue": "10.0.1.0/24",
+            "metadata": {
+                "description": "Address space for the public subnet in the vnet"
+            }
+        },
+        "appgwNetCIDR": {
+            "type": "string",
+            "defaultValue": "10.0.2.0/24",
+            "metadata": {
+                "description": "Address space for the private subnet with Application Gateways"
+            }
+        },
+        "sshUserName": {
+            "type": "string",
+            "metadata": {
+                "description": "Username for SSH access to Bitbucket Server nodes as well as for the jumpbox"
+            }
+        },
+        "bbsNetCIDR": {
+            "type": "string",
+            "defaultValue": "10.0.4.0/24",
+            "metadata": {
+                "description": "Address space for the private subnet where Bitbucket Server nodes are deployed"
+            }
+        },
+        "esNetCIDR": {
+            "type": "string",
+            "defaultValue": "10.0.5.0/24",
+            "metadata": {
+                "description": "Address space for the private subnet where Elasticsearch nodes are deployed"
+            }
+        },
+        "sshKey": {
+            "type": "string",
+            "metadata": {
+                "description": "SSH key to allow access to jumpbox."
+            }
+        },
+        "jumpboxSize": {
+            "type": "string",
+            "defaultValue": "Standard_B1s",
+            "metadata": {
+                "description": "The size of jumpbox VM"
+            }
+        },
+        "bbsHttpPort": {
+            "type": "string",
+            "defaultValue": "7990",
+            "metadata": {
+                "description": "Internal port that Bitbucket Server uses to accept HTTP connections"
+            }
+        },
+        "bbsHazelcastPort": {
+            "type": "string",
+            "defaultValue": "5701",
+            "metadata": {
+                "description": "Internal port that Bitbucket Server uses for Hazelcast communication"
+            }
+        },
+        "linuxOsType": {
+            "type": "string",
+            "defaultValue": "Canonical:UbuntuServer:18.04-LTS",
+            "allowedValues": [
+                "Canonical:UbuntuServer:16.04-LTS",
+                "Canonical:UbuntuServer:18.04-LTS",
+                "RedHat:RHEL:7.5",
+                "OpenLogic:CentOS:7.5",
+                "credativ:Debian:9-backports"
+            ],
+            "metadata": {
+                "description": "Select your preferred Linux OS type. Bear in mind, the Linux OS type has to support Accelerated Networking as well - https://docs.microsoft.com/en-us/azure/virtual-network/create-vm-accelerated-networking-cli"
+            }
+        }
+    },
+    "variables": {
+        "namespace": "bitbucket",
+        "suffix": "[uniqueString(resourceGroup().id)]",
+        "tags": {
+            "vendor": "Atlassian",
+            "product": "Bitbucket Server",
+            "provider": "2F0AF47A-92C7-413A-9009-C3815BFF7AF6"
+        },
+        "image": {
+            "publisher": "[split(parameters('linuxOsType'), ':')[0]]",
+            "offer": "[split(parameters('linuxOsType'), ':')[1]]",
+            "sku": "[split(parameters('linuxOsType'), ':')[2]]",
+            "version": "latest"
+        },
+        "net": {
+            "vnet": {
+                "name": "[concat(variables('namespace'), '-vnet')]",
+                "cidr": "[parameters('vnetCIDR')]"
+            },
+            "nic": {
+                "jumpbox": {
+                    "name": "[concat(variables('namespace'), '-jumpbox-nic')]",
+                    "ipConfig": {
+                        "name": "[concat(variables('namespace'), '-jumpbox-ipconfig')]"
+                    }
+                },
+                "nfs": {
+                    "name": "[concat(variables('namespace'), '-nfs-nic')]",
+                    "ipConfig": {
+                        "name": "[concat(variables('namespace'), '-nfs-ipconfig')]"
+                    }
+                }
+            },
+            "nsg": {
+                "public": {
+                    "name": "[concat(variables('namespace'), '-nsg-public')]"
+                },
+                "appgw": {
+                    "name": "[concat(variables('namespace'), '-nsg-appgtw')]"
+                },
+                "bbs": {
+                    "name": "[concat(variables('namespace'), '-nsg-bbs')]"
+                },
+                "elasticsearch": {
+                    "name": "[concat(variables('namespace'), '-nsg-es')]"
+                }
+            },
+            "subnets": {
+                "public": {
+                    "name": "[concat(variables('namespace'), '-net-public')]",
+                    "cidr": "[parameters('publicNetCIDR')]"
+                },
+                "appgw": {
+                    "name": "[concat(variables('namespace'), '-net-appgw')]",
+                    "cidr": "[parameters('appgwNetCIDR')]"
+                },
+                "bbs": {
+                    "name": "[concat(variables('namespace'), '-net-bbs')]",
+                    "cidr": "[parameters('bbsNetCIDR')]"
+                },
+                "elasticsearch": {
+                    "name": "[concat(variables('namespace'), '-net-es')]",
+                    "cidr": "[parameters('esNetCIDR')]"
+                }
+            },
+            "lb": {
+                "name": "[concat(variables('namespace'), '-lb')]",
+                "dns": "[concat(variables('namespace'), '-ssh-', variables('suffix'))]",
+                "names": {
+                    "publicIP": "[concat(variables('namespace'), '-lb', '-public-ip')]",
+                    "fendIpConfig": "[concat(variables('namespace'), '-lb', '-fend-ipconfig')]",
+                    "bendGit": "[concat(variables('namespace'), '-lb', '-bend-git')]",
+                    "bendSsh": "[concat(variables('namespace'), '-lb', '-bend-ssh')]",
+                    "bendHttp": "[concat(variables('namespace'), '-lb', '-bend-http')]",
+                    "ruleGit": "[concat(variables('namespace'), '-lb', '-rule-git')]",
+                    "ruleSsh": "[concat(variables('namespace'), '-lb', '-rule-ssh')]",
+                    "probeGit": "[concat(variables('namespace'), '-lb', '-rule-git-probe')]",
+                    "probeSsh": "[concat(variables('namespace'), '-lb', '-rule-ssh-probe')]"
+                }
+            }
+        },
+        "vm": {
+            "jumpbox": {
+                "name": "[concat(variables('namespace'), 'jumpbox')]"
+            }
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2017-10-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "name": "[variables('net').nsg.public.name]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "allow",
+                        "properties": {
+                            "description": "Allows HTTP/S, SSH and Git traffic only from the Internet",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRanges": [
+                                "22",
+                                "80",
+                                "443",
+                                "7999"
+                            ],
+                            "sourceAddressPrefix": "Internet",
+                            "destinationAddressPrefix": "VirtualNetwork",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "priority": 100
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2017-10-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "name": "[variables('net').nsg.appgw.name]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "allowHTTP",
+                        "properties": {
+                            "description": "Allows HTTP/S traffic only from the Internet",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRanges": [
+                                "80",
+                                "443"
+                            ],
+                            "sourceAddressPrefix": "Internet",
+                            "destinationAddressPrefix": "[variables('net').subnets.appgw.cidr]",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "priority": 100
+                        }
+                    },
+                    {
+                        "name": "allowAppGwProbes",
+                        "properties": {
+                            "description": "Allow Health Probe traffic",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRanges": [
+                                "65503-65534"
+                            ],
+                            "sourceAddressPrefix": "*",
+                            "destinationAddressPrefix": "*",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "priority": 101
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2017-10-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "name": "[variables('net').nsg.bbs.name]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "allowAppGateway",
+                        "properties": {
+                            "description": "Allows incoming HTTP traffic from App Gateway subnet",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "[parameters('bbsHttpPort')]",
+                            "sourceAddressPrefix": "[variables('net').subnets.appgw.cidr]",
+                            "destinationAddressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "priority": 100
+                        }
+                    },
+                    {
+                        "name": "allowGitSSH",
+                        "properties": {
+                            "description": "Allows incoming Git traffic from load balancer",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "7999",
+                            "sourceAddressPrefix": "Internet",
+                            "destinationAddressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "priority": 101
+                        }
+                    },
+                    {
+                        "name": "allowSSH",
+                        "properties": {
+                            "description": "Allows incoming SSH traffic from public subnet",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRange": "22",
+                            "sourceAddressPrefix": "[variables('net').subnets.public.cidr]",
+                            "destinationAddressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "priority": 102
+                        }
+                    },
+                    {
+                        "name": "allowNFS",
+                        "properties": {
+                            "description": "Allows NFS traffic inside the subnet",
+                            "protocol": "*",
+                            "sourcePortRange": "*",
+                            "destinationPortRanges": [
+                                "111",
+                                "2049",
+                                "1110",
+                                "4045",
+                                "32764-32769"
+                            ],
+                            "sourceAddressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "destinationAddressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "priority": 200
+                        }
+                    },
+                    {
+                        "name": "allowHazelcast",
+                        "properties": {
+                            "description": "Allows Hazelcast traffic inside the subnet",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRanges": [
+                                "[parameters('bbsHazelcastPort')]"
+                            ],
+                            "sourceAddressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "destinationAddressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "access": "Allow",
+                            "direction": "Inbound",
+                            "priority": 201
+                        }
+                    },
+                    {
+                        "name": "allowLoadBalancingHealthProbe",
+                        "properties": {
+                            "description": "Allow health probe traffic",
+                            "protocol": "Tcp",
+                            "sourcePortRange": "*",
+                            "destinationPortRanges": [
+                                "7990"
+                            ],
+                            "sourceAddressPrefix": "AzureLoadBalancer",
+                            "destinationAddressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "access": "Allow",
+                            "priority": 202,
+                            "direction": "Inbound"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "name": "[variables('net').nsg.elasticsearch.name]",
+            "type": "Microsoft.Network/networkSecurityGroups",
+            "apiVersion": "2017-10-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "properties": {
+                "securityRules": [
+                    {
+                        "name": "allowBBS",
+                        "properties": {
+                            "access": "Allow",
+                            "description": "Allows incoming traffic from BBS nodes",
+                            "direction": "Inbound",
+                            "protocol": "Tcp",
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "[variables('net').subnets.elasticsearch.cidr]",
+                            "destinationPortRanges": [
+                                "9200",
+                                "9300"
+                            ],
+                            "priority": 101
+                        }
+                    },
+                    {
+                        "name": "allowSSH",
+                        "properties": {
+                            "access": "Allow",
+                            "description": "Allows incoming SSH traffic from jumpbox to ES data nodes",
+                            "direction": "Inbound",
+                            "protocol": "Tcp",
+                            "sourceAddressPrefix": "VirtualNetwork",
+                            "sourcePortRange": "*",
+                            "destinationAddressPrefix": "[variables('net').subnets.elasticsearch.cidr]",
+                            "destinationPortRange": "22",
+                            "priority": 102
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/virtualNetworks",
+            "apiVersion": "2017-10-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "dependsOn": [
+                "[variables('net').nsg.public.name]",
+                "[variables('net').nsg.appgw.name]",
+                "[variables('net').nsg.bbs.name]",
+                "[variables('net').nsg.elasticsearch.name]"
+            ],
+            "name": "[variables('net').vnet.name]",
+            "properties": {
+                "addressSpace": {
+                    "addressPrefixes": [
+                        "[variables('net').vnet.cidr]"
+                    ]
+                },
+                "subnets": [
+                    {
+                        "name": "[variables('net').subnets.public.name]",
+                        "properties": {
+                            "addressPrefix": "[variables('net').subnets.public.cidr]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('net').nsg.public.name)]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[variables('net').subnets.appgw.name]",
+                        "properties": {
+                            "addressPrefix": "[variables('net').subnets.appgw.cidr]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('net').nsg.appgw.name)]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[variables('net').subnets.bbs.name]",
+                        "properties": {
+                            "addressPrefix": "[variables('net').subnets.bbs.cidr]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('net').nsg.bbs.name)]"
+                            },
+                            "serviceEndpoints": [
+                                {
+                                    "service": "Microsoft.Sql"
+                                }
+                            ]
+                        }
+                    },
+                    {
+                        "name": "[variables('net').subnets.elasticsearch.name]",
+                        "properties": {
+                            "addressPrefix": "[variables('net').subnets.elasticsearch.cidr]",
+                            "networkSecurityGroup": {
+                                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('net').nsg.elasticsearch.name)]"
+                            }
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/publicIPAddresses",
+            "apiVersion": "2017-10-01",
+            "name": "[variables('net').lb.names.publicIP]",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "publicIPAllocationMethod": "Static",
+                "dnsSettings": {
+                    "domainNameLabel": "[variables('net').lb.dns]"
+                },
+                "idleTimeoutInMinutes": 30
+            }
+        },
+        {
+            "type": "Microsoft.Network/loadBalancers",
+            "apiVersion": "2017-10-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "dependsOn": [
+                "[variables('net').vnet.name]"
+            ],
+            "name": "[variables('net').lb.name]",
+            "sku": {
+                "name": "Standard"
+            },
+            "properties": {
+                "frontendIPConfigurations": [
+                    {
+                        "name": "[variables('net').lb.names.fendIpConfig]",
+                        "properties": {
+                            "publicIPAddress": {
+                                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('net').lb.names.publicIP)]"
+                            }
+                        }
+                    }
+                ],
+                "backendAddressPools": [
+                    {
+                        "name": "[variables('net').lb.names.bendGit]"
+                    },
+                    {
+                        "name": "[variables('net').lb.names.bendSsh]"
+                    }
+                ],
+                "loadBalancingRules": [
+                    {
+                        "name": "[variables('net').lb.names.ruleGit]",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('net').lb.name), '/frontendIPConfigurations/', variables('net').lb.names.fendIpConfig)]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('net').lb.name), '/backendAddressPools/', variables('net').lb.names.bendGit)]"
+                            },
+                            "frontendPort": 7999,
+                            "backendPort": 7999,
+                            "protocol": "Tcp",
+                            "idleTimeoutInMinutes": 30,
+                            "probe": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('net').lb.name), '/probes/', variables('net').lb.names.probeGit)]"
+                            }
+                        }
+                    },
+                    {
+                        "name": "[variables('net').lb.names.ruleSsh]",
+                        "properties": {
+                            "frontendIPConfiguration": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('net').lb.name), '/frontendIPConfigurations/', variables('net').lb.names.fendIpConfig)]"
+                            },
+                            "backendAddressPool": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('net').lb.name), '/backendAddressPools/', variables('net').lb.names.bendSsh)]"
+                            },
+                            "frontendPort": 22,
+                            "backendPort": 22,
+                            "protocol": "Tcp",
+                            "idleTimeoutInMinutes": 30,
+                            "probe": {
+                                "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('net').lb.name), '/probes/', variables('net').lb.names.probeSsh)]"
+                            }
+                        }
+                    }
+                ],
+                "probes": [
+                    {
+                        "name": "[variables('net').lb.names.probeGit]",
+                        "properties": {
+                            "provisioningState": "Succeeded",
+                            "protocol": "Tcp",
+                            "port": 7999,
+                            "intervalInSeconds": 5,
+                            "numberOfProbes": 2
+                        }
+                    },
+                    {
+                        "name": "[variables('net').lb.names.probeSsh]",
+                        "properties": {
+                            "provisioningState": "Succeeded",
+                            "protocol": "Tcp",
+                            "port": 22,
+                            "intervalInSeconds": 5,
+                            "numberOfProbes": 2
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2017-10-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "name": "[variables('net').nic.jumpbox.name]",
+            "dependsOn": [
+                "[variables('net').vnet.name]",
+                "[variables('net').lb.name]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "[variables('net').nic.jumpbox.ipConfig.name]",
+                        "properties": {
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('net').vnet.name, variables('net').subnets.public.name)]"
+                            },
+                            "loadBalancerBackendAddressPools": [
+                                {
+                                    "id": "[concat(resourceId('Microsoft.Network/loadBalancers', variables('net').lb.name), '/backendAddressPools/', variables('net').lb.names.bendSsh)]"
+                                }
+                            ]
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Network/networkInterfaces",
+            "apiVersion": "2017-10-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "name": "[variables('net').nic.nfs.name]",
+            "dependsOn": [
+                "[variables('net').vnet.name]"
+            ],
+            "properties": {
+                "ipConfigurations": [
+                    {
+                        "name": "[variables('net').nic.nfs.ipConfig.name]",
+                        "properties": {
+                            "subnet": {
+                                "id": "[resourceId('Microsoft.Network/virtualNetworks/subnets', variables('net').vnet.name, variables('net').subnets.bbs.name)]"
+                            }
+                        }
+                    }
+                ],
+                "enableAcceleratedNetworking": true
+            }
+        },
+        {
+            "type": "Microsoft.Compute/virtualMachines",
+            "apiVersion": "2018-06-01",
+            "location": "[parameters('location')]",
+            "tags": "[variables('tags')]",
+            "dependsOn": [
+                "[variables('net').nic.jumpbox.name]",
+                "[variables('net').lb.name]"
+            ],
+            "name": "[variables('vm').jumpbox.name]",
+            "properties": {
+                "hardwareProfile": {
+                    "vmSize": "[parameters('jumpboxSize')]"
+                },
+                "osProfile": {
+                    "computerName": "[variables('vm').jumpbox.name]",
+                    "adminUsername": "[parameters('sshUserName')]",
+                    "linuxConfiguration": {
+                        "disablePasswordAuthentication": true,
+                        "ssh": {
+                            "publicKeys": [
+                                {
+                                    "path": "[concat('/home/', parameters('sshUserName'), '/.ssh/authorized_keys')]",
+                                    "keyData": "[parameters('sshKey')]"
+                                }
+                            ]
+                        }
+                    }
+                },
+                "storageProfile": {
+                    "imageReference": "[variables('image')]",
+                    "osDisk": {
+                        "createOption": "FromImage"
+                    },
+                    "dataDisks": []
+                },
+                "networkProfile": {
+                    "networkInterfaces": [
+                        {
+                            "id": "[resourceId('Microsoft.Network/networkInterfaces', variables('net').nic.jumpbox.name)]",
+                            "properties": {
+                                "primary": true
+                            }
+                        }
+                    ]
+                }
+            },
+            "resources": [
+                {
+                    "type": "extensions",
+                    "apiVersion": "2018-06-01",
+                    "location": "[parameters('location')]",
+                    "condition": "[not(contains(parameters('linuxOsType'), 'UbuntuServer'))]",
+                    "dependsOn": [
+                        "[variables('vm').jumpbox.name]"
+                    ],
+                    "name": "script",
+                    "properties": {
+                        "publisher": "Microsoft.Azure.Extensions",
+                        "type": "CustomScript",
+                        "typeHandlerVersion": "2.0",
+                        "autoUpgradeMinorVersion": true,
+                        "settings": {
+                            "fileUris": [
+                                "[concat(uri(parameters('_artifactsLocation'), 'scripts/jumpbox_install.sh'), parameters('_artifactsLocationSasToken'))]"
+                            ],
+                            "commandToExecute": "bash jumpbox_install.sh 1>&1 2>&1 > ./jumpbox.install-$(uname -n).log"
+                        }
+                    }
+                }
+            ]
+        }
+    ],
+    "outputs": {
+        "vnetName": {
+            "type": "string",
+            "value": "[variables('net').vnet.name]"
+        },
+        "bbsSubnetName": {
+            "type": "string",
+            "value": "[variables('net').subnets.bbs.name]"
+        },
+        "appGtwySubnetName": {
+            "type": "string",
+            "value": "[variables('net').subnets.appgw.name]"
+        },
+        "esSubnetName": {
+            "type": "string",
+            "value": "[variables('net').subnets.elasticsearch.name]"
+        },
+        "sshLbIpName": {
+            "type": "string",
+            "value": "[variables('net').lb.names.publicIP]"
+        },
+        "sshLbName": {
+            "type": "string",
+            "value": "[variables('net').lb.name]"
+        },
+        "ssh": {
+            "type": "string",
+            "value": "[reference(variables('net').lb.names.publicIP).dnsSettings.fqdn]"
+        },
+        "lbFqdn": {
+            "type": "string",
+            "value": "[reference(variables('net').lb.names.publicIP).dnsSettings.fqdn]"
+        },
+        "jumpboxPrivateIpAddress": {
+            "type": "string",
+            "value": "[reference(variables('net').nic.jumpbox.name).ipConfigurations[0].properties.privateIPAddress]"
+        },
+        "nfsPrivateIpAddress": {
+            "type": "string",
+            "value": "[reference(variables('net').nic.nfs.name).ipConfigurations[0].properties.privateIPAddress]"
+        }
+    }
+}

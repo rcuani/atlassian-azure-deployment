@@ -1,0 +1,16 @@
+node_modules
+.group
+.idea
+*.iml
+.location
+.prefix
+.product
+target
+.vscode
+.createDeployResult
+.deployment
+*.parameters.local.json
+.DS_Store
+npm-debug.log
+.project
+.history

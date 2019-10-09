@@ -1,0 +1,114 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "networkSettings": {
+      "type": "object",
+      "metadata": {
+        "description": "Network settings object"
+      }
+    },
+    "applicationGatewaySettings": {
+      "type": "object",
+      "metadata": {
+        "description": "Application Gateway settings"
+      }
+    },
+    "elasticTags": {
+      "type": "object",
+      "defaultValue": {
+        "provider": "648D2193-0CE0-4EFB-8A82-AF9792184FD9"
+      },
+      "metadata": {
+        "description": "Unique identifiers to allow the Azure Infrastructure to understand the origin of resources deployed to Azure. You do not need to supply a value for this."
+      }
+    }
+  },
+  "resources": [
+    {
+      "apiVersion": "2017-10-01",
+      "name": "es-internal-lb",
+      "type": "Microsoft.Network/loadBalancers",
+      "location": "[parameters('networkSettings').location]",
+      "tags": {
+        "provider": "[toUpper(parameters('elasticTags').provider)]"
+      },
+      "sku": {
+        "name": "Basic"
+      },
+      "properties": {
+        "frontendIPConfigurations": [
+          {
+            "name": "LBFE",
+            "properties": {
+              "subnet": {
+                "id": "[concat(resourceId(parameters('networkSettings').resourceGroup, 'Microsoft.Network/virtualNetworks',parameters('networkSettings').name), '/subnets/', parameters('networkSettings').subnet.name)]"
+              },
+              "privateIPAddress": "[parameters('networkSettings').subnet.loadBalancerIp]",
+              "privateIPAllocationMethod": "Static"
+            }
+          }
+        ],
+        "backendAddressPools": [
+          {
+            "name": "LBBE"
+          }
+        ],
+        "loadBalancingRules": [
+          {
+            "name": "es-http-internal",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers','es-internal-lb'),'/frontendIPConfigurations/LBFE')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers','es-internal-lb'),'/backendAddressPools/LBBE')]"
+              },
+              "protocol": "Tcp",
+              "frontendPort": 9200,
+              "backendPort": 9200,
+              "enableFloatingIP": false,
+              "idleTimeoutInMinutes": 5,
+              "probe": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers','es-internal-lb'),'/probes/es-probe-internal-http')]"
+              }
+            }
+          },
+          {
+            "name": "es-transport-internal",
+            "properties": {
+              "frontendIPConfiguration": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers','es-internal-lb'),'/frontendIPConfigurations/LBFE')]"
+              },
+              "backendAddressPool": {
+                "id": "[concat(resourceId('Microsoft.Network/loadBalancers','es-internal-lb'),'/backendAddressPools/LBBE')]"
+              },
+              "protocol": "Tcp",
+              "frontendPort": 9300,
+              "backendPort": 9300,
+              "enableFloatingIP": false,
+              "idleTimeoutInMinutes": 5
+            }
+          }
+        ],
+        "probes": [
+          {
+            "name": "es-probe-internal-http",
+            "properties": {
+              "protocol": "Tcp",
+              "port": 9200,
+              "intervalInSeconds": 30,
+              "numberOfProbes": 3
+            }
+          }
+        ]
+      }
+    }
+  ],
+  "outputs" : {
+    "fqdn": {
+      "value": "N/A",
+      "type": "string"
+    }
+  }
+}

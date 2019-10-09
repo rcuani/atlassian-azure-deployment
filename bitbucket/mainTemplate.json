@@ -1,0 +1,905 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "defaultValue": "[resourceGroup().location]",
+            "metadata": {
+                "description": "The Azure region/location where the artifacts will be deployed."
+            },
+            "minLength": 5
+        },
+        "_artifactsLocation": {
+            "type": "string",
+            "defaultValue": "https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/bitbucket/",
+            "metadata": {
+                "description": "The URL specifying the location of the installation artifacts."
+            }
+        },
+        "_artifactsLocationSasToken": {
+            "type": "securestring",
+            "metadata": {
+                "description": "The (optional) Shared Access Signature (SAS) token that provides access to resources in the storage account."
+            },
+            "defaultValue": ""
+        },
+        "bitbucketVersion": {
+            "type": "string",
+            "defaultValue": "latest",
+            "metadata": {
+                "description": "The Bitbucket software product version to install. You can also specify 'latest' to download the latest version available. If using with customDownloadUrl you have to specify the correct version."
+            }
+        },
+        "customDownloadUrl": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "Use this URL to override standard Atlassian download url eg for EAP, RC versions. NB will be used in conjunction with the bitbucketVersion parameter."
+            }
+        },
+        "dbCreateNew": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Create a new database or attempt to use an existing specified database. Note that this has to be in same resource group and location as the target deployment."
+            }
+        },
+        "dbType": {
+            "type": "string",
+            "allowedValues": [
+                "Azure SQL DB",
+                "Azure DB for PostgreSQL"
+            ],
+            "defaultValue": "Azure SQL DB",
+            "metadata": {
+                "description": "The database type."
+            }
+        },
+        "cname": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "This is the Canonical Name record (CNAME) for your organization. If you don't provide one, Azure will generate a random sub domain for your instance."
+            }
+        },
+        "sslBase64EncodedPfxCertificate": {
+            "type": "string",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The certificate to be used for SSL termination on the Azure Application Gateway."
+            }
+        },
+        "sslPfxCertificatePassword": {
+            "type": "securestring",
+            "defaultValue": "",
+            "metadata": {
+                "description": "The password of the certificate for SSL termination."
+            }
+        },
+        "bitbucketAdminUserName": {
+            "type": "string",
+            "minLength": 5,
+            "metadata": {
+                "description": "Username for Bitbucket Server administrator user."
+            }
+        },
+        "bitbucketAdminPassword": {
+            "type": "securestring",
+            "minLength": 5,
+            "metadata": {
+                "description": "Password for Bitbucket Server administrator user."
+            }
+        },
+        "bitbucketAdminFullName": {
+            "type": "string",
+            "defaultValue": "John Doe",
+            "metadata": {
+                "description": "Bitbucket Server administorator full name."
+            }
+        },
+        "bitbucketAdminEmail": {
+            "type": "string",
+            "defaultValue": "admin@example.com",
+            "minLength": 5,
+            "metadata": {
+                "description": "Bitbucket Server administrator email."
+            }
+        },
+        "sshUserName": {
+            "type": "string",
+            "metadata": {
+                "description": "Username for SSH access to Bitbucket Server nodes as well as for the jumpbox"
+            }
+        },
+        "sshKey": {
+            "type": "string",
+            "metadata": {
+                "description": "SSH key to allow access to jumpbox."
+            },
+            "minLength": 300
+        },
+        "dbTier": {
+            "type": "string",
+            "allowedValues": [
+                "Basic",
+                "Standard",
+                "Premium",
+                "GeneralPurpose",
+                "BusinessCritical"
+            ],
+            "defaultValue": "Standard",
+            "metadata": {
+                "description": "The database service tier. Note that if the 'bbClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "dbTierSize": {
+            "type": "string",
+            "allowedValues": [
+                "Basic",
+                "S1",
+                "S2",
+                "S3",
+                "S4",
+                "S6",
+                "S7",
+                "S9",
+                "S12",
+                "P1",
+                "P2",
+                "P4",
+                "P6",
+                "P11",
+                "P15",
+                "GP_Gen4_1",
+                "GP_Gen4_10",
+                "GP_Gen4_16",
+                "GP_Gen4_2",
+                "GP_Gen4_24",
+                "GP_Gen4_3",
+                "GP_Gen4_4",
+                "GP_Gen4_5",
+                "GP_Gen4_6",
+                "GP_Gen4_7",
+                "GP_Gen4_8",
+                "GP_Gen4_9",
+                "GP_Gen5_10",
+                "GP_Gen5_12",
+                "GP_Gen5_14",
+                "GP_Gen5_16",
+                "GP_Gen5_18",
+                "GP_Gen5_2",
+                "GP_Gen5_20",
+                "GP_Gen5_24",
+                "GP_Gen5_32",
+                "GP_Gen5_4",
+                "GP_Gen5_40",
+                "GP_Gen5_6",
+                "GP_Gen5_8",
+                "GP_Gen5_80",
+                "BC_Gen4_1",
+                "BC_Gen4_10",
+                "BC_Gen4_16",
+                "BC_Gen4_2",
+                "BC_Gen4_24",
+                "BC_Gen4_3",
+                "BC_Gen4_4",
+                "BC_Gen4_5",
+                "BC_Gen4_6",
+                "BC_Gen4_7",
+                "BC_Gen4_8",
+                "BC_Gen4_9",
+                "BC_Gen5_10",
+                "BC_Gen5_12",
+                "BC_Gen5_14",
+                "BC_Gen5_16",
+                "BC_Gen5_18",
+                "BC_Gen5_2",
+                "BC_Gen5_20",
+                "BC_Gen5_24",
+                "BC_Gen5_32",
+                "BC_Gen5_4",
+                "BC_Gen5_40",
+                "BC_Gen5_6",
+                "BC_Gen5_8",
+                "BC_Gen5_80"
+            ],
+            "defaultValue": "S2",
+            "metadata": {
+                "description": "The size of the database service tier. Basic, Standard (S1..S12) and Premium (P1..P15) tier sizes are available. Choose GP and BC SKUs for vCore model. Note that if the 'bbClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "dbHost": {
+            "type": "string",
+            "defaultValue": "AUTO-GENERATED",
+            "metadata": {
+                "description": "The hostname of database server to be used if an external database is being used. This will be autogenerated if a new database is to be created."
+            }
+        },
+        "dbPort": {
+            "type": "string",
+            "defaultValue": "1433",
+            "metadata": {
+                "description": "The database port to use if an external database is being used. This will be autogenerated if a new database is to be created."
+            }
+        },
+        "dbDatabase": {
+            "type": "string",
+            "defaultValue": "bitbucketdb",
+            "metadata": {
+                "description": "The database name to use if an external database is being used. This will be autogenerated if a new database is to be created."
+            }
+        },
+        "dbUserName": {
+            "type": "string",
+            "defaultValue": "bbdbuser",
+            "metadata": {
+                "description": "The username for the dedicated database user."
+            }
+        },
+        "dbPassword": {
+            "type": "securestring",
+            "minLength": 8,
+            "metadata": {
+                "description": "The password for the dedicated database user."
+            }
+        },
+        "bbsVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_DS3_v2",
+            "allowedValues": [
+                "Standard_D4s_v3",
+                "Standard_D8s_v3",
+                "Standard_D16s_v3",
+                "Standard_D32s_v3",
+                "Standard_D64s_v3",
+                "Standard_DS2_v2",
+                "Standard_DS3_v2",
+                "Standard_DS4_v2",
+                "Standard_DS5_v2",
+                "Standard_DS2",
+                "Standard_DS3",
+                "Standard_DS4",
+                "Standard_B4ms",
+                "Standard_B8ms",
+                "Standard_F2s",
+                "Standard_F4s",
+                "Standard_F8s",
+                "Standard_F16s",
+                "Standard_E4s_v3",
+                "Standard_E8s_v3",
+                "Standard_E16s_v3",
+                "Standard_E32s_v3",
+                "Standard_E64s_v3",
+                "Standard_GS2",
+                "Standard_GS3",
+                "Standard_GS4",
+                "Standard_GS5",
+                "Standard_DS12_v2",
+                "Standard_DS13_v2",
+                "Standard_DS14_v2",
+                "Standard_DS15_v2",
+                "Standard_DS12",
+                "Standard_DS13",
+                "Standard_DS14",
+                "Standard_L4s",
+                "Standard_L8s",
+                "Standard_L16s",
+                "Standard_L32s"
+            ],
+            "metadata": {
+                "description": "The size of Bitbucket Cluster nodes."
+            }
+        },
+        "bbsNodeCount": {
+            "type": "int",
+            "defaultValue": 2,
+            "metadata": {
+                "description": "The amount of Bitbucket Server nodes to deploy"
+            }
+        },
+        "bbsDiskSize": {
+            "type": "int",
+            "defaultValue": 31,
+            "metadata": {
+                "description": "The size (in GB) of the data disk that is used for logs on a Bitbucket Server node"
+            }
+        },
+        "bbsVmDiskCount": {
+            "type": "int",
+            "defaultValue": 8,
+            "maxValue": 32,
+            "metadata": {
+                "description": "The requested BitBucket Node disk will be striped for performance. Essentially the desired disk size will be divided by the bbsVmDiskCount and can't exceed 1023 GB. The bbsVmDiskCount count can't exceed the MaxDiskCount assigned to the VM Size."
+            }
+        },
+        "nfsVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_DS3_v2",
+            "allowedValues": [
+                "Standard_D4s_v3",
+                "Standard_D8s_v3",
+                "Standard_D16s_v3",
+                "Standard_D32s_v3",
+                "Standard_D64s_v3",
+                "Standard_DS2_v2",
+                "Standard_DS3_v2",
+                "Standard_DS4_v2",
+                "Standard_DS5_v2",
+                "Standard_DS2",
+                "Standard_DS3",
+                "Standard_DS4",
+                "Standard_B4ms",
+                "Standard_B8ms",
+                "Standard_F2s",
+                "Standard_F4s",
+                "Standard_F8s",
+                "Standard_F16s",
+                "Standard_E4s_v3",
+                "Standard_E8s_v3",
+                "Standard_E16s_v3",
+                "Standard_E32s_v3",
+                "Standard_E64s_v3",
+                "Standard_GS2",
+                "Standard_GS3",
+                "Standard_GS4",
+                "Standard_GS5",
+                "Standard_DS12_v2",
+                "Standard_DS13_v2",
+                "Standard_DS14_v2",
+                "Standard_DS15_v2",
+                "Standard_DS12",
+                "Standard_DS13",
+                "Standard_DS14",
+                "Standard_L4s",
+                "Standard_L8s",
+                "Standard_L16s",
+                "Standard_L32s"
+            ],
+            "metadata": {
+                "description": "The size of the VM that is used for NFS server."
+            }
+        },
+        "nfsDiskSize": {
+            "type": "int",
+            "defaultValue": 128,
+            "allowedValues": [
+                128,
+                256,
+                512,
+                1024,
+                2048,
+                4095
+            ],
+            "metadata": {
+                "description": "The size of the NFS data disk for Git repositories in GB"
+            }
+        },
+        "nfsVmDiskCount": {
+            "type": "int",
+            "defaultValue": 8,
+            "maxValue": 32,
+            "metadata": {
+                "description": "The requested BitBucket NFS disk will be striped for performance. Essentially the desired disk size will be divided by the bbsVmDiskCount and can't exceed 1023 GB. The nfsVmDiskCount count can't exceed the MaxDiskCount assigned to the VM Size."
+            }
+        },
+        "esDataNodeCount": {
+            "type": "int",
+            "defaultValue": 2,
+            "metadata": {
+                "description": "The number of ElasticSearch Data Nodes to be deployed."
+            }
+        },
+        "esDataDiskSize": {
+            "type": "int",
+            "defaultValue": 32,
+            "metadata": {
+                "description": "The size of the data disk for elasticsearch in GB."
+            }
+        },
+        "esVmDiskCount": {
+            "type": "int",
+            "defaultValue": 8,
+            "maxValue": 32,
+            "metadata": {
+                "description": "The requested ElasticSearch Data node disks will be striped for performance. Essentially the desired disk size will be divided by the esVmDiskCount and can't exceed 1023 GB. The esVmDiskCount count can't exceed the MaxDiskCount assigned to the VM Size."
+            }
+        },
+        "esNodeVmSize": {
+            "type": "string",
+            "defaultValue": "Standard_DS3_v2",
+            "allowedValues": [
+                "Standard_D4s_v3",
+                "Standard_D8s_v3",
+                "Standard_D16s_v3",
+                "Standard_D32s_v3",
+                "Standard_D64s_v3",
+                "Standard_DS2_v2",
+                "Standard_DS3_v2",
+                "Standard_DS4_v2",
+                "Standard_DS5_v2",
+                "Standard_DS2",
+                "Standard_DS3",
+                "Standard_DS4",
+                "Standard_B4ms",
+                "Standard_B8ms",
+                "Standard_F2s",
+                "Standard_F4s",
+                "Standard_F8s",
+                "Standard_F16s",
+                "Standard_E4s_v3",
+                "Standard_E8s_v3",
+                "Standard_E16s_v3",
+                "Standard_E32s_v3",
+                "Standard_E64s_v3",
+                "Standard_GS2",
+                "Standard_GS3",
+                "Standard_GS4",
+                "Standard_GS5",
+                "Standard_DS12_v2",
+                "Standard_DS13_v2",
+                "Standard_DS14_v2",
+                "Standard_DS15_v2",
+                "Standard_DS12",
+                "Standard_DS13",
+                "Standard_DS14",
+                "Standard_L4s",
+                "Standard_L8s",
+                "Standard_L16s",
+                "Standard_L32s"
+            ],
+            "metadata": {
+                "description": "The size of Elasticsearch nodes VM."
+            }
+        },
+        "appGtwyClusterSize": {
+            "type": "int",
+            "allowedValues": [
+                1,
+                2,
+                3,
+                4,
+                5,
+                6
+            ],
+            "defaultValue": 2,
+            "minValue": 1,
+            "metadata": {
+                "description": "The number of nodes in the Application Gateway cluster."
+            }
+        },
+        "appGtwyTier": {
+            "type": "string",
+            "allowedValues": [
+                "Standard_Small",
+                "Standard_Medium",
+                "Standard_Large"
+            ],
+            "defaultValue": "Standard_Medium",
+            "metadata": {
+                "description": "The Application Gateway size."
+            }
+        },
+        "jumpboxSize": {
+            "type": "string",
+            "defaultValue": "Standard_B1s",
+            "metadata": {
+                "description": "The size of jumpbox VM"
+            }
+        },
+        "postgresDbSku": {
+            "type": "string",
+            "defaultValue": "GP_Gen5_4",
+            "allowedValues": [
+                "GP_Gen5_2",
+                "GP_Gen5_4",
+                "GP_Gen5_8",
+                "GP_Gen5_16",
+                "GP_Gen5_32",
+                "MO_Gen5_2",
+                "MO_Gen5_4",
+                "MO_Gen5_8",
+                "MO_Gen5_16",
+                "MO_Gen5_32"
+            ],
+            "metadata": {
+                "description": "The SKU (Stock Keeping Unit) name of the PostgresSQL instance. Follows the convention {pricing tier}{compute generation}{vCores} eg General Purpose, Generation 5, 4 cores is GP_Gen5_4. Note that if the 'jiraClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "postgresDbStorage": {
+            "type": "int",
+            "defaultValue": 102400,
+            "minValue": 102400,
+            "maxValue": 4194304,
+            "metadata": {
+                "description": "The storage size of the PostgresSQL instance in MB. Note that if the 'jiraClusterSize' parameter is used this value will be ignored."
+            }
+        },
+        "linuxOsType": {
+            "type": "string",
+            "defaultValue": "Canonical:UbuntuServer:18.04-LTS",
+            "allowedValues": [
+                "Canonical:UbuntuServer:16.04-LTS",
+                "Canonical:UbuntuServer:18.04-LTS",
+                "RedHat:RHEL:7.5",
+                "OpenLogic:CentOS:7.5",
+                "credativ:Debian:9-backports"
+            ],
+            "metadata": {
+                "description": "Select your preferred Linux OS type. Bear in mind, the Linux OS type has to support Accelerated Networking as well - https://docs.microsoft.com/en-us/azure/virtual-network/create-vm-accelerated-networking-cli"
+            }
+        },
+        "workspaceSku": {
+            "type": "string",
+            "defaultValue": "PerGB2018",
+            "allowedValues": [
+                "Free",
+                "PerNode",
+                "Standalone",
+                "Standard",
+                "Premium",
+                "Unlimited",
+                "PerGB2018"
+            ],
+            "metadata": {
+                "description": "Workspace SKU Pricing Tier. Options depend upon when Azure Subscription created. If after 2018, use 'PerGB2018' otherwise 'Free'."
+            }
+        },
+        "enableAnalytics": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable Azure Operational Insights."
+            }
+        },
+        "enableEmailAlerts": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable email alerts."
+            }
+        },
+        "enableApplicationInsights": {
+            "type": "bool",
+            "defaultValue": true,
+            "metadata": {
+                "description": "Enable Azure Application Insights."
+            }
+        }
+    },
+    "variables": {
+        "namespace": "bitbucket",
+        "vpcTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-vpc.json', parameters('_artifactsLocationSasToken')))]",
+        "bitbucketTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-bitbucket.json', parameters('_artifactsLocationSasToken')))]",
+        "domainTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-domain.json', parameters('_artifactsLocationSasToken')))]",
+        "alertsTemplateUri": "[uri(parameters('_artifactsLocation'), concat('nestedtemplates/azuredeploy-alerts.json', parameters('_artifactsLocationSasToken')))]",
+        "dbServerName": "[concat(variables('namespace'), if(equals(parameters('dbType'),'Azure SQL DB'),'sqlserver','postgres'), uniqueString(resourceGroup().id))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "2018-05-01",
+            "name": "pid-49ff88fd-5e3c-58f7-aadf-6a73ac08ea91",
+            "type": "Microsoft.Resources/deployments",
+            "properties": {
+                "mode": "Incremental",
+                "template": {
+                    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+                    "contentVersion": "1.0.0.0",
+                    "resources": []
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "vpcTemplate",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('vpcTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "_artifactsLocation": {
+                        "value": "[parameters('_artifactsLocation')]"
+                    },
+                    "_artifactsLocationSasToken": {
+                        "value": "[parameters('_artifactsLocationSasToken')]"
+                    },
+                    "sshUserName": {
+                        "value": "[parameters('sshUserName')]"
+                    },
+                    "jumpboxSize": {
+                        "value": "[parameters('jumpboxSize')]"
+                    },
+                    "sshKey": {
+                        "value": "[parameters('sshKey')]"
+                    },
+                    "linuxOsType": {
+                        "value": "[parameters('linuxOsType')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "bitbucketTemplate",
+            "dependsOn": [
+                "vpcTemplate"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('bitbucketTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "_artifactsLocation": {
+                        "value": "[parameters('_artifactsLocation')]"
+                    },
+                    "_artifactsLocationSasToken": {
+                        "value": "[parameters('_artifactsLocationSasToken')]"
+                    },
+                    "sshUserName": {
+                        "value": "[parameters('sshUserName')]"
+                    },
+                    "appGtwyClusterSize": {
+                        "value": "[parameters('appGtwyClusterSize')]"
+                    },
+                    "appGtwyTier": {
+                        "value": "[parameters('appGtwyTier')]"
+                    },
+                    "cname": {
+                        "value": "[if(greater(length(parameters('cname')), 0), concat('bitbucket.', parameters('cname')), parameters('cname'))]"
+                    },
+                    "sshCname": {
+                        "value": "[if(greater(length(parameters('cname')), 0), concat('ssh-bitbucket.', parameters('cname')), parameters('cname'))]"
+                    },
+                    "sslBase64EncodedPfxCertificate": {
+                        "value": "[parameters('sslBase64EncodedPfxCertificate')]"
+                    },
+                    "sslPfxCertificatePassword": {
+                        "value": "[parameters('sslPfxCertificatePassword')]"
+                    },
+                    "dbCreateNew": {
+                        "value": "[parameters('dbCreateNew')]"
+                    },
+                    "dbHost": {
+                        "value": "[if(parameters('dbCreateNew'), variables('dbServerName'), parameters('dbHost'))]"
+                    },
+                    "dbType": {
+                        "value": "[if(equals(parameters('dbType'), 'Azure SQL DB'), 'sqlserver', if(equals(parameters('dbType'), 'Azure DB for PostgreSQL'), 'postgres', 'mysql'))]"
+                    },
+                    "dbPort": {
+                        "value": "[if(parameters('dbCreateNew'), if(equals(parameters('dbType'), 'Azure SQL DB'), '1433', '5432'), parameters('dbPort'))]"
+                    },
+                    "dbDatabase": {
+                        "value": "[parameters('dbDatabase')]"
+                    },
+                    "dbUserName": {
+                        "value": "[if(and(not(parameters('dbCreateNew')), equals(parameters('dbType'), 'Azure DB for PostgreSQL')), split(parameters('dbUserName'), '@')[0], parameters('dbUserName'))]"
+                    },
+                    "dbPassword": {
+                        "value": "[parameters('dbPassword')]"
+                    },
+                    "dbTier": {
+                        "value": "[parameters('dbTier')]"
+                    },
+                    "dbTierSize": {
+                        "value": "[parameters('dbTierSize')]"
+                    },
+                    "postgresDbSku": {
+                        "value": "[parameters('postgresDbSku')]"
+                    },
+                    "postgresDbStorage": {
+                        "value": "[parameters('postgresDbStorage')]"
+                    },
+                    "bbsDiskSize": {
+                        "value": "[parameters('bbsDiskSize')]"
+                    },
+                    "bbsVmDiskCount": {
+                        "value": "[parameters('bbsVmDiskCount')]"
+                    },
+                    "bbsNodeCount": {
+                        "value": "[parameters('bbsNodeCount')]"
+                    },
+                    "bbsVmSize": {
+                        "value": "[parameters('bbsVmSize')]"
+                    },
+                    "bitbucketAdminEmail": {
+                        "value": "[parameters('bitbucketAdminEmail')]"
+                    },
+                    "bitbucketAdminFullName": {
+                        "value": "[parameters('bitbucketAdminFullName')]"
+                    },
+                    "bitbucketAdminPassword": {
+                        "value": "[parameters('bitbucketAdminPassword')]"
+                    },
+                    "bitbucketAdminUsername": {
+                        "value": "[parameters('bitbucketAdminUsername')]"
+                    },
+                    "bitbucketVersion": {
+                        "value": "[parameters('bitbucketVersion')]"
+                    },
+                    "customDownloadUrl": {
+                        "value": "[parameters('customDownloadUrl')]"
+                    },
+                    "esDataDiskSize": {
+                        "value": "[parameters('esDataDiskSize')]"
+                    },
+                    "esVmDiskCount": {
+                        "value": "[parameters('esVmDiskCount')]"
+                    },
+                    "esDataNodeCount": {
+                        "value": "[parameters('esDataNodeCount')]"
+                    },
+                    "esNodeVmSize": {
+                        "value": "[parameters('esNodeVmSize')]"
+                    },
+                    "nfsDiskSize": {
+                        "value": "[parameters('nfsDiskSize')]"
+                    },
+                    "nfsVmDiskCount": {
+                        "value": "[parameters('nfsVmDiskCount')]"
+                    },
+                    "nfsVmSize": {
+                        "value": "[parameters('nfsVmSize')]"
+                    },
+                    "sshKey": {
+                        "value": "[parameters('sshKey')]"
+                    },
+                    "vnetName": {
+                        "value": "[reference('vpcTemplate').outputs.vnetName.value]"
+                    },
+                    "bbsSubnetName": {
+                        "value": "[reference('vpcTemplate').outputs.bbsSubnetName.value]"
+                    },
+                    "appGtwySubnetName": {
+                        "value": "[reference('vpcTemplate').outputs.appGtwySubnetName.value]"
+                    },
+                    "esSubnetName": {
+                        "value": "[reference('vpcTemplate').outputs.esSubnetName.value]"
+                    },
+                    "nfsPrivateIpAddress": {
+                        "value": "[reference('vpcTemplate').outputs.nfsPrivateIpAddress.value]"
+                    },
+                    "lbFqdn": {
+                        "value": "[reference('vpcTemplate').outputs.lbFqdn.value]"
+                    },
+                    "enableAnalytics": {
+                        "value": "[parameters('enableAnalytics')]"
+                    },
+                    "workspaceSku": {
+                        "value": "[parameters('workspaceSku')]"
+                    },
+                    "linuxOsType": {
+                        "value": "[parameters('linuxOsType')]"
+                    }
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Resources/deployments",
+            "apiVersion": "2018-05-01",
+            "name": "domainTemplate",
+            "dependsOn": [
+                "bitBucketTemplate"
+            ],
+            "condition": "[greater(length(parameters('cname')), 0)]",
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('domainTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "cname": {
+                        "value": "[parameters('cname')]"
+                    },
+                    "gtwyIpName": {
+                        "value": "[reference('bitBucketTemplate').outputs.gtwyIpName.value]"
+                    },
+                    "prefix": {
+                        "value": "bitbucket"
+                    },
+                    "sshLbIpName": {
+                        "value": "[reference('vpcTemplate').outputs.sshLbIpName.value]"
+                    },
+                    "sshPrefix": {
+                        "value": "ssh-bitbucket"
+                    }
+                }
+            }
+        },
+        {
+            "apiVersion": "2018-05-01",
+            "name": "alertsTemplate",
+            "type": "Microsoft.Resources/deployments",
+            "condition": "[parameters('enableEmailAlerts')]",
+            "dependsOn": [
+                "bitbucketTemplate"
+            ],
+            "properties": {
+                "mode": "Incremental",
+                "templateLink": {
+                    "uri": "[variables('alertsTemplateUri')]",
+                    "contentVersion": "1.0.0.0"
+                },
+                "parameters": {
+                    "location": {
+                        "value": "[parameters('location')]"
+                    },
+                    "adminUserEmail": {
+                        "value": "[parameters('bitbucketAdminEmail')]"
+                    },
+                    "gtwyName": {
+                        "value": "[reference('bitbucketTemplate').outputs.gtwyName.value]"
+                    },
+                    "bbsClusterName": {
+                        "value": "[reference('bitbucketTemplate').outputs.bbsClusterName.value]"
+                    },
+                    "appInsightsName": {
+                        "value": "[if(parameters('enableApplicationInsights'), reference('bitbucketTemplate').outputs.appInsightsName.value, '')]"
+                    },
+                    "statusCheckUrl": {
+                        "value": "[concat(if(not(empty(parameters('sslBase64EncodedPfxCertificate'))), concat('https://', if(greater(length(parameters('cname')), 0), reference('domainTemplate').outputs.alias.value, reference('bitbucketTemplate').outputs.appEndpoint.value)), concat('http://', if(greater(length(parameters('cname')), 0), reference('domainTemplate').outputs.alias.value, reference('bitbucketTemplate').outputs.appEndpoint.value))), '/status')]"
+                    },
+                    "dbType": {
+                        "value": "[if(equals(parameters('dbType'), 'Azure SQL DB'), 'sqlserver', if(equals(parameters('dbType'), 'Azure DB for PostgreSQL'), 'postgres', 'mysql'))]"
+                    },
+                    "isDbVCoreModel": {
+                        "value": "[contains('GeneralPurpose, BusinessCritical', parameters('dbTier'))]"
+                    },
+                    "dbDatabaseServerName": {
+                        "value": "[split(reference('bitbucketTemplate').outputs.dbDatabaseServerName.value, '.')[0]]"
+                    },
+                    "dbDatabaseName": {
+                        "value": "[reference('bitbucketTemplate').outputs.dbDatabaseName.value]"
+                    },
+                    "workspaceName": {
+                        "value": "[reference('bitbucketTemplate').outputs.workspaceName.value]"
+                    },
+                    "sshLbName": {
+                        "value": "[reference('vpcTemplate').outputs.sshLbName.value]"
+                    },
+                    "esLbName": {
+                        "value": "[reference('bitbucketTemplate').outputs.esLbName.value]"
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {
+        "appEndpoint": {
+            "type": "string",
+            "value": "[reference('bitbucketTemplate').outputs.appEndpoint.value]"
+        },
+        "sshEndpoint": {
+            "type": "string",
+            "value": "[reference('bitbucketTemplate').outputs.sshEndpoint.value]"
+        },
+        "ssh": {
+            "type": "string",
+            "value": "[concat('ssh ', parameters('sshUserName'), '@', reference('vpcTemplate').outputs.ssh.value)]"
+        },
+        "jumpbox": {
+            "type": "string",
+            "value": "[reference('vpcTemplate').outputs.lbFqdn.value]"
+        },
+        "nfs": {
+            "type": "string",
+            "value": "[reference('bitbucketTemplate').outputs.nfs.value]"
+        },
+        "jdbcUrl": {
+            "type": "string",
+            "value": "[reference('bitbucketTemplate').outputs.jdbcUrl.value]"
+        }
+    }
+}

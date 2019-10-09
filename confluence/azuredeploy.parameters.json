@@ -1,0 +1,18 @@
+{
+    "$schema": "http://schema.management.azure.com/schemas/2015-01-01/deploymentParameters.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "confClusterSize": {
+            "value": "small"
+        },
+        "dbPassword": {
+            "value": ".Jkv435jxaDKL2345KA7YpbLyWJLPmocWx43rcn69"
+        },
+        "sshUserName": {
+            "value": "confluenceadmin"
+        },
+        "confAdminUserPassword": {
+            "value": "admin"
+        }
+    }
+}

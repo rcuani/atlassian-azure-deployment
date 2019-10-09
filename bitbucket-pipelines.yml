@@ -1,0 +1,226 @@
+# This is a sample build configuration for Python.
+# Check our guides at https://confluence.atlassian.com/x/x4UWN for more examples.
+# Only use spaces to indent your .yml configuration.
+# -----
+# You can specify a custom docker image from Docker Hub as your build environment.
+image: python:3.5.6
+
+options:
+  max-time: 60
+ 
+pipelines:
+  custom:
+    nightlyJiraSmokeTest:
+    - step:
+        name: Build and deploy Jira
+        caches:
+          - pip
+        script:
+          - pip install --upgrade pip
+          - pip install setuptools -U
+          - pip install azure-cli
+          - mkdir -p $BITBUCKET_CLONE_DIR/outputs
+          
+          # Have to use artifact file because env variables don't carry over to after-script
+          - echo "BB_PIPELINE_$BITBUCKET_BUILD_NUMBER" > $BITBUCKET_CLONE_DIR/outputs/resourcegroup
+          - export AZURE_PIPELINE_RG=$(cat $BITBUCKET_CLONE_DIR/outputs/resourcegroup)
+          - az login --service-principal --username $AZURE_APP_ID --password $AZURE_PASSWORD --tenant $AZURE_TENANT_ID
+          - echo "{\"location\":{\"value\":\"$AZURE_LOCATION\"},\"sshKey\":{\"value\":\"$JUMPBOX_SSH_KEY\"}}" > jumpboxParam.json
+          - cat jumpboxParam.json
+          - az group create --resource-group $AZURE_PIPELINE_RG --location $AZURE_LOCATION
+          
+          # Have to use Azure pipe because azure cli fails eithout return error exit code. Sigh. 
+          - pipe: microsoft/azure-arm-deploy:1.0.1 
+            variables:
+              AZURE_APP_ID: $AZURE_APP_ID
+              AZURE_PASSWORD: $AZURE_PASSWORD
+              AZURE_TENANT_ID: $AZURE_TENANT_ID
+              AZURE_RESOURCE_GROUP: $AZURE_PIPELINE_RG
+              AZURE_LOCATION: $AZURE_LOCATION
+              AZURE_DEPLOYMENT_NAME: $AZURE_PIPELINE_RG
+              AZURE_DEPLOYMENT_MODE: 'Complete'
+              AZURE_DEPLOYMENT_TEMPLATE_URI: 'https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/jira/mainTemplate.json'
+              AZURE_DEPLOYMENT_PARAMETERS: 'https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/jira/azuredeploy.parameters.json --parameters @jumpboxParam.json'
+          
+          # Got here so get deployment output. Can't get it from pipe as doesn't allow log capture/piping
+          - az group deployment show --resource-group $AZURE_PIPELINE_RG --name $AZURE_PIPELINE_RG > $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json
+          
+          # Get endpoint from Outputs section and ping heartbeat
+          - APP_ENDPOINT=$(jp.py -f $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json 'properties.outputs.appEndpoint.value' | sed 's/"//g')
+          - echo "Testing app heartbeat at $APP_ENDPOINT/status"
+          - curl -isSf --retry 15 --retry-connrefused $APP_ENDPOINT/status
+          
+          # Hit API to ensure user is configured correctly
+          - curl -isSf --retry 15 --retry-connrefused -u admin:admin $APP_ENDPOINT/rest/api/2/project
+        artifacts:
+          - outputs/**
+        after-script:
+          - az group delete --resource-group $(cat outputs/resourcegroup) --yes --no-wait
+          
+
+    nightlyJiraPostgresRedHatSmokeTest:
+        - step:
+            name: Build and deploy Jira
+            caches:
+              - pip
+            script:
+              - pip install --upgrade pip
+              - pip install setuptools -U
+              - pip install azure-cli
+              - mkdir -p $BITBUCKET_CLONE_DIR/outputs
+
+              # Have to use artifact file because env variables don't carry over to after-script
+              - echo "BB_PIPELINE_$BITBUCKET_BUILD_NUMBER" > $BITBUCKET_CLONE_DIR/outputs/resourcegroup
+              - export AZURE_PIPELINE_RG=$(cat $BITBUCKET_CLONE_DIR/outputs/resourcegroup)
+              - az login --service-principal --username $AZURE_APP_ID --password $AZURE_PASSWORD --tenant $AZURE_TENANT_ID
+              - echo "{\"location\":{\"value\":\"$AZURE_LOCATION\"},\"sshKey\":{\"value\":\"$JUMPBOX_SSH_KEY\"},\"linuxOsType\":{\"value\":\"RedHat:RHEL:7.5\"},\"dbType\":{\"value\":\"Azure DB for PostgreSQL\"}}" > jumpboxParam.json
+              - cat jumpboxParam.json
+              - az group create --resource-group $AZURE_PIPELINE_RG --location $AZURE_LOCATION
+
+              # Have to use Azure pipe because azure cli fails eithout return error exit code. Sigh. 
+              - pipe: microsoft/azure-arm-deploy:1.0.1 
+                variables:
+                  AZURE_APP_ID: $AZURE_APP_ID
+                  AZURE_PASSWORD: $AZURE_PASSWORD
+                  AZURE_TENANT_ID: $AZURE_TENANT_ID
+                  AZURE_RESOURCE_GROUP: $AZURE_PIPELINE_RG
+                  AZURE_LOCATION: $AZURE_LOCATION
+                  AZURE_DEPLOYMENT_NAME: $AZURE_PIPELINE_RG
+                  AZURE_DEPLOYMENT_MODE: 'Complete'
+                  AZURE_DEPLOYMENT_TEMPLATE_URI: 'https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/jira/mainTemplate.json'
+                  AZURE_DEPLOYMENT_PARAMETERS: 'https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/jira/azuredeploy.parameters.json --parameters @jumpboxParam.json'
+
+              # Got here so get deployment output. Can't get it from pipe as doesn't allow log capture/piping
+              - az group deployment show --resource-group $AZURE_PIPELINE_RG --name $AZURE_PIPELINE_RG > $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json
+
+              # Get endpoint from Outputs section and ping heartbeat
+              - APP_ENDPOINT=$(jp.py -f $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json 'properties.outputs.appEndpoint.value' | sed 's/"//g')
+              - echo "Testing app heartbeat at $APP_ENDPOINT/status"
+              - curl -isSf --retry 15 --retry-connrefused $APP_ENDPOINT/status
+
+              # Hit API to ensure user is configured correctly
+              - curl -isSf --retry 15 --retry-connrefused -u admin:admin $APP_ENDPOINT/rest/api/2/project
+            artifacts:
+              - outputs/**
+            after-script:
+              - az group delete --resource-group $(cat outputs/resourcegroup) --yes --no-wait
+              
+
+    nightlyConfluenceSmokeTest:
+    - step:
+        name: Build and deploy Confluence
+        caches:
+          - pip
+        script:
+          - pip install --upgrade pip
+          - pip install setuptools -U
+          - pip install azure-cli
+          - mkdir -p $BITBUCKET_CLONE_DIR/outputs
+
+          # Have to use artifact file because env variables don't carry over to after-script
+          - echo "BB_PIPELINE_$BITBUCKET_BUILD_NUMBER" > $BITBUCKET_CLONE_DIR/outputs/resourcegroup
+          - export AZURE_PIPELINE_RG=$(cat $BITBUCKET_CLONE_DIR/outputs/resourcegroup)
+          - az login --service-principal --username $AZURE_APP_ID --password $AZURE_PASSWORD --tenant $AZURE_TENANT_ID
+          - echo "{\"location\":{\"value\":\"$AZURE_LOCATION\"},\"sshKey\":{\"value\":\"$JUMPBOX_SSH_KEY\"}}" > jumpboxParam.json
+          - cat jumpboxParam.json
+          - az group create --resource-group $AZURE_PIPELINE_RG --location $AZURE_LOCATION
+
+          # Have to use Azure pipe because azure cli fails eithout return error exit code. Sigh. 
+          - pipe: microsoft/azure-arm-deploy:1.0.1 
+            variables:
+              AZURE_APP_ID: $AZURE_APP_ID
+              AZURE_PASSWORD: $AZURE_PASSWORD
+              AZURE_TENANT_ID: $AZURE_TENANT_ID
+              AZURE_RESOURCE_GROUP: $AZURE_PIPELINE_RG
+              AZURE_LOCATION: $AZURE_LOCATION
+              AZURE_DEPLOYMENT_NAME: $AZURE_PIPELINE_RG
+              AZURE_DEPLOYMENT_MODE: 'Complete'
+              AZURE_DEPLOYMENT_TEMPLATE_URI: 'https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/confluence/mainTemplate.json'
+              AZURE_DEPLOYMENT_PARAMETERS: 'https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/confluence/azuredeploy.parameters.json --parameters @jumpboxParam.json'
+          
+          # Got here so get deployment output. Can't get it from pipe as doesn't allow log capture/piping
+          - az group deployment show --resource-group $AZURE_PIPELINE_RG --name $AZURE_PIPELINE_RG > $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json
+
+          # Get endpoint from Outputs section and ping heartbeat
+          - APP_ENDPOINT=$(jp.py -f $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json 'properties.outputs.appEndpoint.value' | sed 's/"//g')
+          - echo "Testing app heartbeat at $APP_ENDPOINT/status"
+          - curl -isSf --retry 15 --retry-connrefused $APP_ENDPOINT/status
+          
+          # Hit API to ensure user is configured correctly
+          - curl -isSf --retry 15 --retry-connrefused -u admin:admin $APP_ENDPOINT/rest/api/space
+        artifacts:
+          - outputs/**
+        after-script:
+          - az group delete --resource-group $(cat outputs/resourcegroup) --yes --no-wait
+
+
+    nightlyBitBucketSmokeTest:
+        - step:
+            name: Build and deploy BitBucket
+            caches:
+              - pip
+            script:
+              - pip install --upgrade pip
+              - pip install setuptools -U
+              - pip install azure-cli
+              - apt-get update
+              - apt-get -y install netcat
+              - mkdir -p $BITBUCKET_CLONE_DIR/outputs
+
+              # Have to use artifact file because env variables don't carry over to after-script
+              - echo "BB_PIPELINE_$BITBUCKET_BUILD_NUMBER" > $BITBUCKET_CLONE_DIR/outputs/resourcegroup
+              - export AZURE_PIPELINE_RG=$(cat $BITBUCKET_CLONE_DIR/outputs/resourcegroup)
+              - az login --service-principal --username $AZURE_APP_ID --password $AZURE_PASSWORD --tenant $AZURE_TENANT_ID
+              - echo "{\"location\":{\"value\":\"$AZURE_LOCATION\"},\"sshKey\":{\"value\":\"$JUMPBOX_SSH_KEY\"}}" > jumpboxParam.json
+              - cat jumpboxParam.json
+              - az group create --resource-group $AZURE_PIPELINE_RG --location $AZURE_LOCATION
+
+              # Have to use Azure pipe because azure cli fails eithout return error exit code. Sigh. 
+              - pipe: microsoft/azure-arm-deploy:1.0.1 
+                variables:
+                  AZURE_APP_ID: $AZURE_APP_ID
+                  AZURE_PASSWORD: $AZURE_PASSWORD
+                  AZURE_TENANT_ID: $AZURE_TENANT_ID
+                  AZURE_RESOURCE_GROUP: $AZURE_PIPELINE_RG
+                  AZURE_LOCATION: $AZURE_LOCATION
+                  AZURE_DEPLOYMENT_NAME: $AZURE_PIPELINE_RG
+                  AZURE_DEPLOYMENT_MODE: 'Complete'
+                  AZURE_DEPLOYMENT_TEMPLATE_URI: 'https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/bitbucket/mainTemplate.json'
+                  AZURE_DEPLOYMENT_PARAMETERS: 'https://bitbucket.org/atlassian/atlassian-azure-deployment/raw/master/bitbucket/azuredeploy.parameters.json --parameters @jumpboxParam.json'
+              
+              # Got here so get deployment output. Can't get it from pipe as doesn't allow log capture/piping
+              - az group deployment show --resource-group $AZURE_PIPELINE_RG --name $AZURE_PIPELINE_RG > $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json
+
+              # Get endpoint from Outputs section and ping heartbeat
+              - APP_ENDPOINT=$(jp.py -f $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json 'properties.outputs.appEndpoint.value' | sed 's/"//g')
+              - echo "Testing app heartbeat at $APP_ENDPOINT/status"
+              - curl -isSf --retry 15 --retry-connrefused $APP_ENDPOINT/status
+              
+              # Hit API to ensure user is configured correctly
+              - curl -isSf --retry 15 --retry-connrefused -u bbadmin:admin $APP_ENDPOINT/rest/api/1.0/projects
+            artifacts:
+              - outputs/**
+            after-script:
+              - echo "Starting to clean up after success/failure of Azure deployment"
+              
+              # Get the deployment results again - if deployment error wouldn't get it from happy path above
+              - az group deployment show --resource-group $(cat outputs/resourcegroup) --name $(cat outputs/resourcegroup) > outputs/azureDeployOutput.json
+              
+              # Get app logs
+              - printf "Host *\nStrictHostKeyChecking no" > ~/.ssh/config
+              - echo $JUMPBOX_SSH_KEY > ~/.ssh/azure.pub
+              - chmod 600 ~/.ssh/azure.pub
+              
+              - SSH_URL=$(jp.py -f $BITBUCKET_CLONE_DIR/outputs/azureDeployOutput.json 'properties.outputs.ssh.value' | sed 's/"//g' | sed 's/^ssh//')
+              - mkdir -p outputs/10.0.4.5 outputs/10.0.4.6
+              - scp -o "ProxyCommand=ssh -i ~/.ssh/azure.pub ${SSH_URL} nc %h %p" bbadmin@10.0.4.5:/var/atlassian/application-data/bitbucket/log/atlassian-*.log outputs/10.0.4.5 || true
+              - scp -o "ProxyCommand=ssh -i ~/.ssh/azure.pub ${SSH_URL} nc %h %p" bbadmin@10.0.4.6:/var/atlassian/application-data/bitbucket/log/atlassian-*.log outputs/10.0.4.6 || true
+              
+              # Have to delete backup items in vault before we can tear down RG completedly
+              - VAULT_NAME=$(az backup vault list --resource-group $(cat outputs/resourcegroup) --query '[].name' -otsv)
+              - echo "Deleting recovery vault ${VAULT_NAME} first"
+              - az backup vault delete --force --resource-group $(cat outputs/resourcegroup) --name ${VAULT_NAME} --yes || true
+              - az group delete --resource-group $(cat outputs/resourcegroup) --yes --no-wait              
+
+
+

@@ -1,0 +1,293 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string"
+        },
+        "workspaceName": {
+            "type": "string"
+        },
+        "workspaceSku": {
+            "type": "string",
+            "defaultValue": "PerGB2018",
+            "allowedValues": [
+                "Free",
+                "PerNode",
+                "Standalone",
+                "Standard",
+                "Premium",
+                "Unlimited",
+                "PerGB2018"
+            ],
+            "metadata": {
+                "description": "Workspace SKU Pricing Tier. Options depend upon when Azure Subscription created. If after 2018, use 'PerGB2018' otherwise 'Free'."
+            }
+        }
+    },
+    "variables": {
+        "workspace": {
+            "sku": "[parameters('workspaceSku')]"
+        }
+    },
+    "resources": [
+        {
+            "type": "Microsoft.OperationalInsights/workspaces",
+            "name": "[parameters('workspaceName')]",
+            "apiVersion": "2015-11-01-preview",
+            "location": "[parameters('location')]",
+            "scale": null,
+            "properties": {
+                "sku": {
+                    "name": "[variables('workspace').sku]"
+                }
+            },
+            "resources": [
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "BitbucketLogs",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "CustomLog",
+                    "properties": {
+                        "customLogName": "BitbucketLogs",
+                        "description": "Captures all Atlassian logs found at /var/atlassian/application-data/bitbucket/log",
+                        "inputs": [
+                            {
+                                "location": {
+                                    "fileSystemLocations": {
+                                        "linuxFileTypeLogPaths": [
+                                            "/var/atlassian/application-data/bitbucket/log/atlassian*.log"
+                                        ]
+                                    }
+                                },
+                                "recordDelimiter": {
+                                    "regexDelimiter": {
+                                        "pattern": "((\\d{2})|(\\d{4}))-([0-1]\\d)-(([0-3]\\d)|(\\d))\\s((\\d)|([0-1]\\d)|(2[0-4])):[0-5][0-9]:[0-5][0-9]",
+                                        "matchIndex": 0,
+                                        "matchIndexSpecified": true,
+                                        "numberedGroup": null
+                                    }
+                                }
+                            }
+                        ],
+                        "extractions": [
+                            {
+                                "extractionName": "TimeGenerated",
+                                "extractionType": "DateTime",
+                                "extractionProperties": {
+                                    "dateTimeExtraction": {
+                                        "regex": [
+                                            {
+                                                "matchIndex": 0,
+                                                "pattern": "((\\d{2})|(\\d{4}))-([0-1]\\d)-(([0-3]\\d)|(\\d))\\s((\\d)|([0-1]\\d)|(2[0-4])):[0-5][0-9]:[0-5][0-9]"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "BitBucketLogCollection",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "CustomLogCollection",
+                    "properties": {
+                        "state": "LinuxLogsEnabled"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "BitBucketSysLog",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "LinuxSyslog",
+                    "properties": {
+                        "syslogName": "syslog",
+                        "syslogSeverities": [
+                            {
+                                "severity": "emerg"
+                            },
+                            {
+                                "severity": "alert"
+                            },
+                            {
+                                "severity": "crit"
+                            },
+                            {
+                                "severity": "err"
+                            },
+                            {
+                                "severity": "warning"
+                            }
+                        ]
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "BitBucketSysLogCollection",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "LinuxSyslogCollection",
+                    "properties": {
+                        "state": "Enabled"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "BitBucketLinuxPerf",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "LinuxPerformanceObject",
+                    "properties": {
+                        "performanceCounters": [
+                            {
+                                "counterName": "% Used Space"
+                            },
+                            {
+                                "counterName": "Disk Transfers/sec"
+                            },
+                            {
+                                "counterName": "Disk Reads/sec"
+                            },
+                            {
+                                "counterName": "Disk Writes/sec"
+                            },
+                            {
+                                "counterName": "% Free Space"
+                            }
+                        ],
+                        "objectName": "Logical Disk",
+                        "instanceName": "*",
+                        "intervalSeconds": 30
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "BitBucketLinuxPerf2",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "LinuxPerformanceObject",
+                    "properties": {
+                        "performanceCounters": [
+                            {
+                                "counterName": "% Processor Time"
+                            }
+                        ],
+                        "objectName": "Processor",
+                        "instanceName": "*",
+                        "intervalSeconds": 30
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "BitBucketLinuxPerf3",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "LinuxPerformanceObject",
+                    "properties": {
+                        "performanceCounters": [
+                            {
+                                "counterName": "% Used Memory"
+                            }
+                        ],
+                        "objectName": "Memory",
+                        "instanceName": "*",
+                        "intervalSeconds": 30
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "BitBucketLinuxPerfCollection",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "LinuxPerformanceCollection",
+                    "properties": {
+                        "state": "Enabled"
+                    }
+                },
+                {
+                    "apiVersion": "2015-11-01-preview",
+                    "type": "dataSources",
+                    "name": "ElasticSearchLogs",
+                    "dependsOn": [
+                        "[concat('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName'))]"
+                    ],
+                    "kind": "CustomLog",
+                    "properties": {
+                        "customLogName": "ElasticSearchLogs",
+                        "description": "Captures all ES logs found at /var/log/elasticsearch",
+                        "inputs": [
+                            {
+                                "location": {
+                                    "fileSystemLocations": {
+                                        "linuxFileTypeLogPaths": [
+                                            "/var/log/elasticsearch/bitbucket-elasticsearch*.log"
+                                        ]
+                                    }
+                                },
+                                "recordDelimiter": {
+                                    "regexDelimiter": {
+                                        "pattern": "((\\d{2})|(\\d{4}))-([0-1]\\d)-(([0-3]\\d)|(\\d))\\s((\\d)|([0-1]\\d)|(2[0-4])):[0-5][0-9]:[0-5][0-9]",
+                                        "matchIndex": 0,
+                                        "matchIndexSpecified": true,
+                                        "numberedGroup": null
+                                    }
+                                }
+                            }
+                        ],
+                        "extractions": [
+                            {
+                                "extractionName": "TimeGenerated",
+                                "extractionType": "DateTime",
+                                "extractionProperties": {
+                                    "dateTimeExtraction": {
+                                        "regex": [
+                                            {
+                                                "matchIndex": 0,
+                                                "pattern": "((\\d{2})|(\\d{4}))-([0-1]\\d)-(([0-3]\\d)|(\\d))\\s((\\d)|([0-1]\\d)|(2[0-4])):[0-5][0-9]:[0-5][0-9]"
+                                            }
+                                        ]
+                                    }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        }
+    ],
+    "outputs": {
+        "workspaceId": {
+            "value": "[reference(parameters('workspaceName')).customerId]",
+            "type": "string"
+        },
+        "workspacePrimaryKey": {
+            "value": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), '2015-11-01-preview').primarySharedKey]",
+            "type": "string"
+        },
+        "workspaceSecondaryKey": {
+            "value": "[listKeys(resourceId('Microsoft.OperationalInsights/workspaces/', parameters('workspaceName')), '2015-11-01-preview').secondarySharedKey]",
+            "type": "string"
+        }
+    }
+}

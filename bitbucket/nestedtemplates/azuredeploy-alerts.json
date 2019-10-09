@@ -1,0 +1,757 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "metadata": {
+                "description": "The region where Azure will house the deployment."
+            },
+            "minLength": 5
+        },
+        "adminUserEmail": {
+            "type": "string"
+        },
+        "gtwyName": {
+            "type": "string"
+        },
+        "bbsClusterName": {
+            "type": "string"
+        },
+        "appInsightsName": {
+            "type": "string"
+        },
+        "statusCheckUrl": {
+            "type": "string"
+        },
+        "dbType": {
+            "type": "string",
+            "allowedValues": [
+                "sqlserver",
+                "postgres",
+                "mysql"
+            ],
+            "defaultValue": "sqlserver"
+        },
+        "isDbVCoreModel": {
+            "type": "bool"
+        },
+        "dbDatabaseServerName": {
+            "type": "string"
+        },
+        "dbDatabaseName": {
+            "type": "string"
+        },
+        "workspaceName": {
+            "type": "string"
+        },
+        "sshLbName": {
+            "type": "string"
+        },
+        "esLbName": {
+            "type": "string"
+        }
+    },
+    "variables": {
+        "namespace": "bb",
+        "supportTeam": {
+            "name": "[concat(variables('namespace'), '-SupportTeam-', uniqueString(resourceGroup().id))]",
+            "shortName": "[toUpper(concat(variables('namespace'), 'SupTeam'))]"
+        },
+        "alerts": {
+            "bbNodeOffline": {
+                "name": "[concat(variables('namespace'), '-AlertClusterNodeOffline-', uniqueString(resourceGroup().id))]"
+            },
+            "bbSanSize": {
+                "name": "[concat(variables('namespace'), '-AlertSharedStorageSize-', uniqueString(resourceGroup().id))]"
+            },
+            "bbClusterNodeCPU": {
+                "name": "[concat(variables('namespace'), '-AlertClusterNodeHighCpuUsage-', uniqueString(resourceGroup().id))]"
+            },
+            "dbCpuPercentage": {
+                "name": "[concat(variables('namespace'), '-AlertDbCpuPercentage-', uniqueString(resourceGroup().id))]",
+                "description": "Monitors DB CPU Utilisation"
+            },
+            "dbDtuPercentage": {
+                "name": "[concat(variables('namespace'), '-AlertDbDtuPercentage-', uniqueString(resourceGroup().id))]",
+                "description": "Monitors DB DTU Utilisation"
+            },
+            "dbSizePercentage": {
+                "name": "[concat(variables('namespace'), '-AlertDbSizePercentage-', uniqueString(resourceGroup().id))]",
+                "description": "Monitors DB Storage Utilisation"
+            },
+            "dbIoConsumptionPercentage": {
+                "name": "[concat(variables('namespace'), '-AlertDbIoConsumptionPercentage-', uniqueString(resourceGroup().id))]",
+                "description": "Monitors DB IO Consumption"
+            },
+            "nfsNodeOffline": {
+                "name": "[concat(variables('namespace'), '-AlertNfsNodeOffline-', uniqueString(resourceGroup().id))]",
+                "description": "Haven't received a heartbeat from the Bitbucket NFS server within the last 10 mins - might be offline",
+                "severityLevel": "1",
+                "operator": "GreaterThan",
+                "threshold": "0"
+            },
+            "nfsSharedFreeSpace": {
+                "name": "[concat(variables('namespace'), '-AlertNfsSharedFreeSpace-', uniqueString(resourceGroup().id))]",
+                "description": "The NFS Shared Drive is running out of space!",
+                "severityLevel": "1",
+                "operator": "GreaterThan",
+                "threshold": "0"
+            },
+            "sshLoadBalancerHealthCheckAlert": {
+                "name": "[concat(variables('namespace'), '-AlertSSHLBHealthCheck-', uniqueString(resourceGroup().id))]",
+                "description": "The Bitbucket SSH Git Load Balancer is experiencing health check issues.",
+                "severityLevel": 1
+            },
+            "esLoadBalancerHealthCheckAlert": {
+                "name": "[concat(variables('namespace'), '-AlertESLBHealthCheck-', uniqueString(resourceGroup().id))]",
+                "description": "The Bitbucket ElasticSearch Load Balancer is experiencing health check issues.",
+                "severityLevel": 1
+            },
+            "nodeFreeDiskCheckAlert": {
+                "name": "[concat(variables('namespace'), '-AlertFreeDiskSpaceCheck-', uniqueString(resourceGroup().id))]",
+                "description": "One or more nodes have been found which have disk space < 10% free.",
+                "severityLevel": 1,
+                "operator": "GreaterThan",
+                "threshold": "0"
+            },
+            "nodeHighCpuUsageCheckAlert": {
+                "name": "[concat(variables('namespace'), '-AlertHighCpuUsageCheck-', uniqueString(resourceGroup().id))]",
+                "description": "One or more nodes have been found which have High CPU Usgae > 80%.",
+                "severityLevel": 1,
+                "operator": "GreaterThan",
+                "threshold": "0"
+            }
+        },
+        "webTestName": "[toLower(concat('AppHeartBeat-', parameters('appInsightsName')))]",
+        "webTestAlertName": "[concat(variables('webTestName'), guid(resourceGroup().id))]",
+        "webTest": "[concat('<WebTest Name=\"AppHeartBeat\" Id=\"', guid(resourceGroup().id), '\" Enabled=\"True\" CssProjectStructure=\"\" CssIteration=\"\" Timeout=\"120\" WorkItemIds=\"\" xmlns=\"http://microsoft.com/schemas/VisualStudio/TeamTest/2010\" Description=\"\" CredentialUserName=\"\" CredentialPassword=\"\" PreAuthenticate=\"True\" Proxy=\"default\" StopOnError=\"False\" RecordedResultFile=\"\" ResultsLocale=\"\"> <Items><Request Method=\"GET\" Guid=\"a07aa756-7c4b-c73e-876f-d7edcc469051\" Version=\"1.1\" Url=\"', parameters('statusCheckUrl') ,'\" ThinkTime=\"0\" Timeout=\"120\" ParseDependentRequests=\"False\" FollowRedirects=\"True\" RecordResult=\"True\" Cache=\"False\" ResponseTimeGoal=\"0\" Encoding=\"utf-8\" ExpectedHttpStatusCode=\"200\" ExpectedResponseUrl=\"\" ReportingName=\"\" IgnoreHttpStatusCode=\"False\" /></Items><ValidationRules><ValidationRule Classname=\"Microsoft.VisualStudio.TestTools.WebTesting.Rules.ValidationRuleFindText, Microsoft.VisualStudio.QualityTools.WebTestFramework, Version=10.0.0.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a\" DisplayName=\"Find Text\" Description=\"Verifies the existence of the specified text in the response.\" Level=\"High\" ExectuionOrder=\"BeforeDependents\"><RuleParameters><RuleParameter Name=\"FindText\" Value=\"&#x7B;&#x22;state&#x22;&#x3A;&#x22;RUNNING&#x22;&#x7D;\" /><RuleParameter Name=\"IgnoreCase\" Value=\"False\" /><RuleParameter Name=\"UseRegularExpression\" Value=\"False\" /><RuleParameter Name=\"PassIfTextFound\" Value=\"True\" /></RuleParameters></ValidationRule></ValidationRules> </WebTest>')]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.Insights/actionGroups",
+            "name": "[variables('supportTeam').name]",
+            "apiVersion": "2018-03-01",
+            "location": "Global",
+            "properties": {
+                "groupShortName": "[variables('supportTeam').shortName]",
+                "enabled": true,
+                "emailReceivers": [
+                    {
+                        "name": "BBEmailAction_-EmailAction-",
+                        "emailAddress": "[parameters('adminUserEmail')]"
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Insights/scheduledQueryRules",
+            "apiVersion": "2018-04-16",
+            "name": "[variables('alerts').nodeHighCpuUsageCheckAlert.name]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "[concat('hidden-link:', resourceId('microsoft.insights/components/', parameters('workspaceName')))]": "Resource"
+            },
+            "properties": {
+                "description": "[variables('alerts').nodeHighCpuUsageCheckAlert.description]",
+                "enabled": "true",
+                "source": {
+                    "dataSourceId": "[resourceId('microsoft.operationalinsights/workspaces', parameters('workspaceName'))]",
+                    "queryType": "ResultCount",
+                    "query": "Perf | where ObjectName == \"Processor\" and CounterName == \"% Processor Time\"  and InstanceName == \"_Total\" and CounterValue >= 80 | summarize cpuUtilization = max(CounterValue) by Computer"
+                },
+                "action": {
+                    "odata.type": "Microsoft.WindowsAzure.Management.Monitoring.Alerts.Models.Microsoft.AppInsights.Nexus.DataContracts.Resources.ScheduledQueryRules.AlertingAction",
+                    "severity": "[variables('alerts').nodeHighCpuUsageCheckAlert.severityLevel]",
+                    "aznsAction": {
+                        "actionGroup": "[array(resourceId('microsoft.insights/actionGroups', variables('supportTeam').name))]"
+                    },
+                    "trigger": {
+                        "thresholdOperator": "[variables('alerts').nodeHighCpuUsageCheckAlert.operator]",
+                        "threshold": "[variables('alerts').nodeHighCpuUsageCheckAlert.threshold]"
+                    }
+                },
+                "schedule": {
+                    "frequencyInMinutes": "5",
+                    "timeWindowInMinutes": "10"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Insights/scheduledQueryRules",
+            "apiVersion": "2018-04-16",
+            "name": "[variables('alerts').nodeFreeDiskCheckAlert.name]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "[concat('hidden-link:', resourceId('microsoft.insights/components/', parameters('workspaceName')))]": "Resource"
+            },
+            "properties": {
+                "description": "[variables('alerts').nodeFreeDiskCheckAlert.description]",
+                "enabled": "true",
+                "source": {
+                    "dataSourceId": "[resourceId('microsoft.operationalinsights/workspaces', parameters('workspaceName'))]",
+                    "queryType": "ResultCount",
+                    "query": "Perf | where ObjectName == \"Logical Disk\" and CounterName == \"% Free Space\" and InstanceName  !in (\"_Total\", \"/mnt\", \"/boot/efi\") and CounterValue <10 | summarize free_disk_space = min(CounterValue) by Computer, InstanceName"
+                },
+                "action": {
+                    "odata.type": "Microsoft.WindowsAzure.Management.Monitoring.Alerts.Models.Microsoft.AppInsights.Nexus.DataContracts.Resources.ScheduledQueryRules.AlertingAction",
+                    "severity": "[variables('alerts').nodeFreeDiskCheckAlert.severityLevel]",
+                    "aznsAction": {
+                        "actionGroup": "[array(resourceId('microsoft.insights/actionGroups', variables('supportTeam').name))]"
+                    },
+                    "trigger": {
+                        "thresholdOperator": "[variables('alerts').nodeFreeDiskCheckAlert.operator]",
+                        "threshold": "[variables('alerts').nodeFreeDiskCheckAlert.threshold]"
+                    }
+                },
+                "schedule": {
+                    "frequencyInMinutes": "5",
+                    "timeWindowInMinutes": "10"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Insights/scheduledQueryRules",
+            "apiVersion": "2018-04-16",
+            "name": "[variables('alerts').nfsNodeOffline.name]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "[concat('hidden-link:', resourceId('microsoft.insights/components/', parameters('workspaceName')))]": "Resource"
+            },
+            "properties": {
+                "description": "[variables('alerts').nfsNodeOffline.description]",
+                "enabled": "true",
+                "source": {
+                    "dataSourceId": "[resourceId('microsoft.operationalinsights/workspaces', parameters('workspaceName'))]",
+                    "queryType": "ResultCount",
+                    "query": "Heartbeat | where Computer == \"bbsnfs\"  | summarize lastHeartbeart = max(TimeGenerated) | where lastHeartbeart < ago(10m)"
+                },
+                "action": {
+                    "odata.type": "Microsoft.WindowsAzure.Management.Monitoring.Alerts.Models.Microsoft.AppInsights.Nexus.DataContracts.Resources.ScheduledQueryRules.AlertingAction",
+                    "severity": "[variables('alerts').nfsNodeOffline.severityLevel]",
+                    "aznsAction": {
+                        "actionGroup": "[array(resourceId('microsoft.insights/actionGroups', variables('supportTeam').name))]"
+                    },
+                    "trigger": {
+                        "thresholdOperator": "[variables('alerts').nfsNodeOffline.operator]",
+                        "threshold": "[variables('alerts').nfsNodeOffline.threshold]"
+                    }
+                },
+                "schedule": {
+                    "frequencyInMinutes": "5",
+                    "timeWindowInMinutes": "60"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Insights/scheduledQueryRules",
+            "apiVersion": "2018-04-16",
+            "name": "[variables('alerts').nfsSharedFreeSpace.name]",
+            "location": "[parameters('location')]",
+            "tags": {
+                "[concat('hidden-link:', resourceId('microsoft.insights/components/', parameters('workspaceName')))]": "Resource"
+            },
+            "properties": {
+                "description": "[variables('alerts').nfsSharedFreeSpace.description]",
+                "enabled": "true",
+                "source": {
+                    "dataSourceId": "[resourceId('microsoft.operationalinsights/workspaces', parameters('workspaceName'))]",
+                    "queryType": "ResultCount",
+                    "query": "Perf | where Computer == \"bbsnfs\" and CounterName == \"% Free Space\" and InstanceName == \"/var/atlassian/application-data/bitbucket/shared\" and CounterValue < 10 and TimeGenerated > now(-10m) | summarize DiskFreePercentage = min(CounterValue) by bin(TimeGenerated, 5m), Computer"
+                },
+                "action": {
+                    "odata.type": "Microsoft.WindowsAzure.Management.Monitoring.Alerts.Models.Microsoft.AppInsights.Nexus.DataContracts.Resources.ScheduledQueryRules.AlertingAction",
+                    "severity": "[variables('alerts').nfsSharedFreeSpace.severityLevel]",
+                    "aznsAction": {
+                        "actionGroup": "[array(resourceId('microsoft.insights/actionGroups', variables('supportTeam').name))]"
+                    },
+                    "trigger": {
+                        "thresholdOperator": "[variables('alerts').nfsSharedFreeSpace.operator]",
+                        "threshold": "[variables('alerts').nfsSharedFreeSpace.threshold]"
+                    }
+                },
+                "schedule": {
+                    "frequencyInMinutes": "5",
+                    "timeWindowInMinutes": "60"
+                }
+            }
+        },
+        {
+            "type": "Microsoft.Insights/metricAlerts",
+            "apiVersion": "2018-03-01",
+            "name": "[variables('alerts').sshLoadBalancerHealthCheckAlert.name]",
+            "location": "global",
+            "properties": {
+                "description": "[variables('alerts').sshLoadBalancerHealthCheckAlert.description]",
+                "severity": "[variables('alerts').sshLoadBalancerHealthCheckAlert.severityLevel]",
+                "enabled": true,
+                "scopes": [
+                    "[resourceId('Microsoft.Network/loadBalancers', parameters('sshLbName'))]"
+                ],
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "criteria": {
+                    "allOf": [
+                        {
+                            "metricName": "DipAvailability",
+                            "metricNamespace": "microsoft.network/loadbalancers",
+                            "operator": "LessThanOrEqual",
+                            "timeAggregation": "Average",
+                            "name": "Metric1",
+                            "dimensions": [],
+                            "monitorTemplateType": "8",
+                            "criterionType": "StaticThresholdCriterion",
+                            "threshold": 95
+                        }
+                    ],
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria"
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            }
+        },
+        {
+            "comments": "Disabled for now - need Standard ES LB for metrics instead of configured basic one atm. Reason ES LB remains basic is because you lose internet copnnectivity (to download template scripts) when plkaced behinf internal Standard LB.",
+            "type": "Microsoft.Insights/metricAlerts",
+            "apiVersion": "2018-03-01",
+            "name": "[variables('alerts').esLoadBalancerHealthCheckAlert.name]",
+            "condition": false,
+            "location": "global",
+            "properties": {
+                "description": "[variables('alerts').esLoadBalancerHealthCheckAlert.description]",
+                "severity": "[variables('alerts').esLoadBalancerHealthCheckAlert.severityLevel]",
+                "enabled": true,
+                "scopes": [
+                    "[resourceId('Microsoft.Network/loadBalancers', parameters('esLbName'))]"
+                ],
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "criteria": {
+                    "allOf": [
+                        {
+                            "metricName": "DipAvailability",
+                            "metricNamespace": "microsoft.network/loadbalancers",
+                            "operator": "LessThanOrEqual",
+                            "timeAggregation": "Average",
+                            "name": "Metric1",
+                            "dimensions": [],
+                            "monitorTemplateType": "8",
+                            "criterionType": "StaticThresholdCriterion",
+                            "threshold": 95
+                        }
+                    ],
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria"
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            }
+        },
+        {
+            "type": "Microsoft.Insights/metricAlerts",
+            "name": "[variables('alerts').bbNodeOffline.name]",
+            "apiVersion": "2018-03-01",
+            "location": "global",
+            "tags": {},
+            "scale": null,
+            "properties": {
+                "description": "A BitBucket node has just became unhealthly/gone offline. ",
+                "enabled": true,
+                "severity": 1,
+                "windowSize": "PT5M",
+                "evaluationFrequency": "PT1M",
+                "templateType": "8",
+                "templateSpecificParameters": {},
+                "scopes": [
+                    "[resourceId('Microsoft.Network/applicationGateways/', parameters('gtwyName'))]"
+                ],
+                "criteria": {
+                    "allOf": [
+                        {
+                            "metricName": "UnhealthyHostCount",
+                            "metricNamespace": "Microsoft.Network/applicationGateways",
+                            "operator": "GreaterThan",
+                            "threshold": 0,
+                            "timeAggregation": "Average",
+                            "name": "Metric1",
+                            "dimensions": [],
+                            "monitorTemplateType": "8"
+                        }
+                    ],
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria"
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', variables('supportTeam').name)]"
+            ]
+        },
+        {
+            "type": "Microsoft.Insights/metricAlerts",
+            "name": "[variables('alerts').bbClusterNodeCPU.name]",
+            "apiVersion": "2018-03-01",
+            "location": "Global",
+            "properties": {
+                "description": "A BitBucket node is running hot.",
+                "enabled": true,
+                "severity": 3,
+                "windowSize": "PT5M",
+                "evaluationFrequency": "PT1M",
+                "templateType": "8",
+                "templateSpecificParameters": {},
+                "scopes": [
+                    "[resourceId('Microsoft.Compute/virtualMachineScaleSets', parameters('bbsClusterName'))]"
+                ],
+                "criteria": {
+                    "allOf": [
+                        {
+                            "metricName": "Percentage CPU",
+                            "metricNamespace": "Microsoft.Compute/virtualMachineScaleSets",
+                            "operator": "GreaterThan",
+                            "threshold": 80,
+                            "timeAggregation": "Average",
+                            "name": "Metric1",
+                            "dimensions": [
+                                {
+                                    "name": "VMName",
+                                    "operator": "Include",
+                                    "values": [
+                                        "*"
+                                    ]
+                                }
+                            ],
+                            "monitorTemplateType": "8"
+                        }
+                    ],
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria"
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('Microsoft.Insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('Microsoft.Insights/actionGroups', variables('supportTeam').name)]"
+            ]
+        },
+        {
+            "type": "Microsoft.Insights/webtests",
+            "name": "[variables('webTestName')]",
+            "apiVersion": "2015-05-01",
+            "location": "[parameters('location')]",
+            "condition": "[not(empty(parameters('appInsightsName')))]",
+            "tags": {
+                "[concat('hidden-link:', resourceId('microsoft.insights/components/', parameters('appInsightsName')))]": "Resource"
+            },
+            "properties": {
+                "SyntheticMonitorId": "[variables('webTestName')]",
+                "Name": "AppHeartBeat",
+                "Description": "",
+                "Enabled": true,
+                "Frequency": 300,
+                "Timeout": 120,
+                "Kind": "ping",
+                "RetryEnabled": true,
+                "Locations": [
+                    {
+                        "Id": "us-ca-sjc-azr"
+                    },
+                    {
+                        "Id": "us-tx-sn1-azr"
+                    },
+                    {
+                        "Id": "us-il-ch1-azr"
+                    },
+                    {
+                        "Id": "us-va-ash-azr"
+                    },
+                    {
+                        "Id": "us-fl-mia-edge"
+                    }
+                ],
+                "Configuration": {
+                    "WebTest": "[variables('webTest')]"
+                }
+            }
+        },
+        {
+            "type": "microsoft.insights/alertrules",
+            "name": "[variables('webTestAlertName')]",
+            "apiVersion": "2016-03-01",
+            "location": "[parameters('location')]",
+            "condition": "[not(empty(parameters('appInsightsName')))]",
+            "properties": {
+                "name": "[variables('webTestAlertName')]",
+                "description": "",
+                "isEnabled": true,
+                "condition": {
+                    "odata.type": "Microsoft.Azure.Management.Insights.Models.LocationThresholdRuleCondition",
+                    "dataSource": {
+                        "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleMetricDataSource",
+                        "resourceUri": "[resourceId('microsoft.insights/webtests', variables('webTestName'))]",
+                        "metricName": "GSMT_AvRaW"
+                    },
+                    "windowSize": "PT5M",
+                    "failedLocationCount": 3
+                },
+                "action": {
+                    "odata.type": "Microsoft.Azure.Management.Insights.Models.RuleEmailAction",
+                    "sendToServiceOwners": false,
+                    "customEmails": []
+                }
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.insights/webtests', variables('webTestName'))]"
+            ]
+        },
+        {
+            "type": "microsoft.insights/metricAlerts",
+            "name": "[concat(variables('alerts').dbCpuPercentage.name,'-sqlserver')]",
+            "apiVersion": "2018-03-01",
+            "location": "global",
+            "condition": "[and(not(empty(parameters('appInsightsName'))), equals(parameters('dbType'), 'sqlserver'))]",
+            "properties": {
+                "name": "[variables('alerts').dbCpuPercentage.name]",
+                "description": "[variables('alerts').dbCpuPercentage.description]",
+                "severity": 1,
+                "enabled": true,
+                "scopes": ["[resourceId('Microsoft.Sql/servers/databases', parameters('dbDatabaseServerName'), parameters('dbDatabaseName'))]"
+                ],
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "criteria": {
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+                    "allOf": [
+                        {
+                            "name" : "[variables('alerts').dbCpuPercentage.name]",
+                            "metricName": "cpu_percent",
+                            "operator": "GreaterThan",
+                            "threshold" : "80",
+                            "timeAggregation": "Average"
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]"
+            ]
+        },
+        {
+            "type": "microsoft.insights/metricAlerts",
+            "name": "[concat(variables('alerts').dbDtuPercentage.name,'-sqlserver')]",
+            "apiVersion": "2018-03-01",
+            "location": "global",
+            "condition": "[and(and(not(empty(parameters('appInsightsName'))), equals(parameters('dbType'), 'sqlserver')), not(parameters('isDbVCoreModel')))]",
+            "properties": {
+                "name": "[variables('alerts').dbCpuPercentage.name]",
+                "description": "[variables('alerts').dbCpuPercentage.description]",
+                "severity": 1,
+                "enabled": true,
+                "scopes": ["[resourceId('Microsoft.Sql/servers/databases', parameters('dbDatabaseServerName'), parameters('dbDatabaseName'))]"
+                ],
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "criteria": {
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+                    "allOf": [
+                        {
+                            "name" : "[variables('alerts').dbCpuPercentage.name]",
+                            "metricName": "dtu_consumption_percent",
+                            "operator": "GreaterThan",
+                            "threshold" : "80",
+                            "timeAggregation": "Average"
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]"
+            ]
+        },
+        {
+            "type": "microsoft.insights/metricAlerts",
+            "name": "[concat(variables('alerts').dbSizePercentage.name,'-sqlserver')]",
+            "apiVersion": "2018-03-01",
+            "location": "global",
+            "condition": "[and(not(empty(parameters('appInsightsName'))), equals(parameters('dbType'), 'sqlserver'))]",
+            "properties": {
+                "name": "[variables('alerts').dbSizePercentage.name]",
+                "description": "[variables('alerts').dbSizePercentage.description]",
+                "severity": 1,
+                "enabled": true,
+                "scopes": ["[resourceId('Microsoft.Sql/servers/databases', parameters('dbDatabaseServerName'), parameters('dbDatabaseName'))]"
+                ],
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "criteria": {
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+                    "allOf": [
+                        {
+                            "name" : "[variables('alerts').dbSizePercentage.name]",
+                            "metricName": "storage_percent",
+                            "operator": "GreaterThan",
+                            "threshold" : "80",
+                            "timeAggregation": "Average"
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]"
+            ]
+        },
+        {
+            "type": "microsoft.insights/metricAlerts",
+            "name": "[variables('alerts').dbCpuPercentage.name]",
+            "apiVersion": "2018-03-01",
+            "location": "global",
+            "condition": "[and(not(empty(parameters('appInsightsName'))), equals(parameters('dbType'), 'postgres'))]",
+            "properties": {
+                "name": "[variables('alerts').dbCpuPercentage.name]",
+                "description": "[variables('alerts').dbCpuPercentage.description]",
+                "severity": 1,
+                "enabled": true,
+                "scopes": [
+                    "[resourceId('Microsoft.DBforPostgreSQL/servers', parameters('dbDatabaseServerName'))]"
+                ],
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "criteria": {
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+                    "allOf": [
+                        {
+                            "name": "[variables('alerts').dbCpuPercentage.name]",
+                            "metricName": "cpu_percent",
+                            "dimensions": [],
+                            "operator": "GreaterThan",
+                            "threshold": "80",
+                            "timeAggregation": "Average"
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]"
+            ]
+        },
+        {
+            "type": "microsoft.insights/metricAlerts",
+            "name": "[variables('alerts').dbIoConsumptionPercentage.name]",
+            "apiVersion": "2018-03-01",
+            "location": "global",
+            "condition": "[and(not(empty(parameters('appInsightsName'))), equals(parameters('dbType'), 'postgres'))]",
+            "properties": {
+                "name": "[variables('alerts').dbIoConsumptionPercentage.name]",
+                "description": "[variables('alerts').dbIoConsumptionPercentage.description]",
+                "severity": 1,
+                "enabled": true,
+                "scopes": [
+                    "[resourceId('Microsoft.DBforPostgreSQL/servers', parameters('dbDatabaseServerName'))]"
+                ],
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "criteria": {
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+                    "allOf": [
+                        {
+                            "name": "[variables('alerts').dbIoConsumptionPercentage.name]",
+                            "metricName": "io_consumption_percent",
+                            "dimensions": [],
+                            "operator": "GreaterThan",
+                            "threshold": "80",
+                            "timeAggregation": "Average"
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]"
+            ]
+        },
+        {
+            "type": "microsoft.insights/metricAlerts",
+            "name": "[variables('alerts').dbSizePercentage.name]",
+            "apiVersion": "2018-03-01",
+            "location": "global",
+            "condition": "[and(not(empty(parameters('appInsightsName'))), equals(parameters('dbType'), 'postgres'))]",
+            "properties": {
+                "name": "[variables('alerts').dbSizePercentage.name]",
+                "description": "[variables('alerts').dbSizePercentage.description]",
+                "severity": 1,
+                "enabled": true,
+                "scopes": [
+                    "[resourceId('Microsoft.DBforPostgreSQL/servers', parameters('dbDatabaseServerName'))]"
+                ],
+                "evaluationFrequency": "PT1M",
+                "windowSize": "PT5M",
+                "criteria": {
+                    "odata.type": "Microsoft.Azure.Monitor.SingleResourceMultipleMetricCriteria",
+                    "allOf": [
+                        {
+                            "name": "[variables('alerts').dbSizePercentage.name]",
+                            "metricName": "storage_percent",
+                            "dimensions": [],
+                            "operator": "GreaterThan",
+                            "threshold": "80",
+                            "timeAggregation": "Average"
+                        }
+                    ]
+                },
+                "actions": [
+                    {
+                        "actionGroupId": "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]",
+                        "webHookProperties": {}
+                    }
+                ]
+            },
+            "dependsOn": [
+                "[resourceId('microsoft.insights/actionGroups', variables('supportTeam').name)]"
+            ]
+        }
+    ],
+    "outputs": {}
+}

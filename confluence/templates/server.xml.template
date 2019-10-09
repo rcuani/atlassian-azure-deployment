@@ -1,0 +1,37 @@
+<Server port="8000" shutdown="SHUTDOWN" debug="0">
+    <Service name="Tomcat-Standalone">
+        <Connector
+                port="{{SERVER_APP_PORT}}"
+                connectionTimeout="{{CONFLUENCE_HTTP_CONNECTOR_CONNECTION_TIMEOUT}}"
+                disableUploadTimeout="{{CONFLUENCE_HTTP_CONNECTOR_DISABLE_UPLOAD_TIMEOUT}}"
+                maxHttpHeaderSize="{{CONFLUENCE_HTTP_CONNECTOR_MAX_HEADER_SIZE}}"
+                redirectPort="8443"
+                maxThreads="{{CONFLUENCE_HTTP_CONNECTOR_MAX_THREADS}}"
+                minSpareThreads="{{CONFLUENCE_HTTP_CONNECTOR_MIN_THREADS}}"
+                enableLookups="false"
+                acceptCount="{{CONFLUENCE_HTTP_CONNECTOR_MAX_ACCEPT_COUNT}}"
+                debug="0"
+                URIEncoding="UTF-8"
+                protocol="org.apache.coyote.http11.Http11NioProtocol"
+                proxyName="{{SERVER_PROXY_NAME}}"
+                proxyPort="{{SERVER_PROXY_PORT}}"
+                scheme="{{SERVER_APP_SCHEME}}"
+                secure="{{SERVER_SECURE_FLAG}}"
+        />
+
+        <Engine name="ConfluenceDC" defaultHost="localhost" debug="0">
+
+            <Host name="localhost" debug="0" appBase="webapps" unpackWARs="true" autoDeploy="false" startStopThreads="4">
+                <Context path="" docBase="../confluence" debug="0" reloadable="false" useHttpOnly="true">
+                    <Manager pathname=""/>
+                    <Valve className="org.apache.catalina.valves.StuckThreadDetectionValve" threshold="60"/>
+                </Context>
+
+                <Context path="/synchrony-proxy" docBase="../synchrony-proxy" debug="0" reloadable="false" useHttpOnly="true">
+                    <Valve className="org.apache.catalina.valves.StuckThreadDetectionValve" threshold="60"/>
+                </Context>
+            </Host>
+        </Engine>
+    </Service>
+</Server>
+

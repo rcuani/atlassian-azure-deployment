@@ -1,0 +1,37 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "location": {
+            "type": "string",
+            "metadata": {
+                "description": "Location for all resources."
+            }
+        }
+    },
+    "variables": {
+        "namespace": "bitbucket",
+        "skuName": "RS0",
+        "skuTier": "Standard",
+        "vaultName": "[concat(variables('namespace'), '-vault-', uniqueString(resourceGroup().id))]"
+    },
+    "resources": [
+        {
+            "type": "Microsoft.RecoveryServices/vaults",
+            "apiVersion": "2018-01-10",
+            "name": "[variables('vaultName')]",
+            "location": "[parameters('location')]",
+            "sku": {
+                "name": "[variables('skuName')]",
+                "tier": "[variables('skuTier')]"
+            },
+            "properties": {}
+        }
+    ],
+    "outputs": {
+        "vaultName": {
+            "type": "string",
+            "value": "[variables('vaultName')]"
+        }
+    }
+}
