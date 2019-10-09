@@ -297,7 +297,7 @@
         },
         "linuxOsType": {
             "type": "string",
-            "defaultValue": "OpenLogic:CentOS:7.5",
+            "defaultValue": "Canonical:UbuntuServer:18.04-LTS",
             "allowedValues": [
                 "Canonical:UbuntuServer:16.04-LTS",
                 "Canonical:UbuntuServer:18.04-LTS",
