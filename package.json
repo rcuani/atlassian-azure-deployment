@@ -22,7 +22,7 @@
     "gulp-fail": "^1.0.5",
     "merge": "^1.2.0",
     "run-sequence": "^2.1.0",
-    "shelljs": "^0.7.8",
+    "shelljs": "^0.8.5",
     "standard": "^11.0.1"
   }
 }
